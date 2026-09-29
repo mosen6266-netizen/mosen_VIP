@@ -35,6 +35,7 @@
 
 <script type="module">
 import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, uiAlert, uiConfirm, uiPrompt, localDateKey, buildCustomerSearchText, readDashboardStat, adjustDashboardStat, createEntityBatch } from './base44.js';
+import { customerSearchFields, ensureCustomerIndex, initGlobalSearch, smartCustomerSubscription } from './vip-optimizations.js?v=20260929-1';
 let username=localStorage.getItem('mVIP_rep_username')||'',displayName=localStorage.getItem('mVIP_rep_display_name')||'',fields=[],customers=[],progressStages=[],editingId=null;
 const CUSTOMER_PAGE_SIZE=50;
 let customerPage=1,customerHasNext=false,myCustomerTotal=0,myArchivedTotal=0,myTodayTotal=0,customerCountTimer=null;
@@ -53,11 +54,12 @@ async function boot(){
       let fieldTimer=0,progressTimer=0,customerTimer=0,repTimer=0;
       base44.entities.VIPFormField.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(fieldTimer);fieldTimer=setTimeout(()=>loadFields(),450)});
       base44.entities.VIPProgressStage.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(progressTimer);progressTimer=setTimeout(()=>{loadProgress();loadCustomers()},500)});
-      base44.entities.VIPCustomer.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(customerTimer);customerTimer=setTimeout(()=>loadCustomers(),500);scheduleMyCustomerCountRefresh()});
+      base44.entities.VIPCustomer.subscribe(evt=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(customerTimer);customerTimer=setTimeout(()=>smartCustomerSubscription({event:evt,customers,render:renderCustomers,load:()=>loadCustomers(),refreshCounts:scheduleMyCustomerCountRefresh,matches:r=>String(r.rep_username||'')===username&&Boolean(r.archived)===(customerMode==='archive')&&matchesSalesFilters(r)}),650)});
       base44.entities.VIPDashboardStats.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;scheduleMyCustomerCountRefresh()});
       base44.entities.VIPSalesRep.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(repTimer);repTimer=setTimeout(()=>verifyRep(),500)});
     }catch(_){}
-    ensureSearchIndex().catch(()=>{});
+    ensureCustomerIndex(base44,{rep_username:username},600).catch(()=>{});
+    initGlobalSearch({base44,role:'sales',repUsername:username,onCustomer:row=>openForm(row),onWorkflow:(flow,step)=>navigator.clipboard?.writeText(step.contentForeign||step.contentZh||'')});
   }catch(_){location.href='./login.html'}
 }
 async function verifyRep(){const reps=unwrap(await base44.entities.VIPSalesRep.list({sort:'-created_date',limit:500}));if(!reps.some(r=>String(r.username||'').toLowerCase()===username.toLowerCase())){localStorage.removeItem('mVIP_rep_username');location.href='./login.html'}}
@@ -75,7 +77,7 @@ async function ensureSearchIndex(){
     while(true){
       const i=p++;if(i>=missing.length)return;
       const r=missing[i];
-      try{await base44.entities.VIPCustomer.update(r.id,{search_text:buildCustomerSearchText(r.rep_username,r.data||{})})}catch(_){}
+      try{await base44.entities.VIPCustomer.update(r.id,{...customerSearchFields(r.rep_username,r.data||{})})}catch(_){}
     }
   }
   await Promise.all(Array.from({length:Math.min(4,missing.length)},()=>worker()));
@@ -153,11 +155,9 @@ async function loadCustomers({resetPage=false,refreshCounts=false}={}){
         const rows=unwrap(await base44.entities.VIPCustomer.filter(salesServerQuery(),'-created_date',CUSTOMER_PAGE_SIZE+1,skip));
         customerHasNext=rows.length>CUSTOMER_PAGE_SIZE;
         customers=rows.slice(0,CUSTOMER_PAGE_SIZE);
-      }catch(_){
-        globalCustomerRows=(await fetchAllSalesCustomers(salesBaseQuery())).filter(matchesSalesFilters);
-        const start=(customerPage-1)*CUSTOMER_PAGE_SIZE;
-        customers=globalCustomerRows.slice(start,start+CUSTOMER_PAGE_SIZE);
-        customerHasNext=start+CUSTOMER_PAGE_SIZE<globalCustomerRows.length;
+      }catch(err){
+        globalCustomerRows=null;
+        throw new Error('服务器筛选暂时不可用，请稍后重试。'+(err?.message?' '+err.message:''));
       }
       if(!customers.length&&customerPage>1){customerPage--;return loadCustomers({refreshCounts})}
     }else{
@@ -264,7 +264,7 @@ function attachSalesPreviewEditor(portal,row){
     const completed_progress_ids=[...portal.querySelectorAll('[data-preview-progress-id]:checked')].map(x=>x.dataset.previewProgressId);
     showMessage(note,'正在保存…');
     try{
-      await base44.entities.VIPCustomer.update(row.id,{rep_username:username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length,search_text:buildCustomerSearchText(username,data)});
+      await base44.entities.VIPCustomer.update(row.id,{rep_username:username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length,...customerSearchFields(username,data)});
       await logCustomerDiff(row,data,completed_progress_ids,row.id);
       row.data=data;row.completed_progress_ids=completed_progress_ids;
       showMessage(note,'已保存并同步。','ok');
@@ -431,10 +431,10 @@ form.onsubmit=async e=>{
   try{
     if(startingEditingId){
       const oldRow=customers.find(x=>String(x.id)===String(startingEditingId));
-      await base44.entities.VIPCustomer.update(startingEditingId,{rep_username:username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length,search_text:buildCustomerSearchText(username,data)});
+      await base44.entities.VIPCustomer.update(startingEditingId,{rep_username:username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length,...customerSearchFields(username,data)});
       if(oldRow)await logCustomerDiff(oldRow,data,completed_progress_ids,startingEditingId);
     }else{
-      const created=await base44.entities.VIPCustomer.create({rep_username:username,data,completed_progress_ids,archived:false,starred:false,admin_sort_score:completed_progress_ids.length,search_text:buildCustomerSearchText(username,data)});
+      const created=await base44.entities.VIPCustomer.create({rep_username:username,data,completed_progress_ids,archived:false,starred:false,admin_sort_score:completed_progress_ids.length,...customerSearchFields(username,data)});
       const cid=created?.id||'';
       if(cid)editingId=cid;
       await Promise.all([
