@@ -2,7 +2,7 @@
   "format": "MOSEN_VIP_BASE44_SCHEMA_BLUEPRINT",
   "version": 3,
   "app_id": "6abb8b9e7bc76cdfe0aeb883",
-  "generated_at": "2026-09-29T15:03:39.844Z",
+  "generated_at": "2026-09-29T15:21:21.124Z",
   "entities": [
     {
       "entity_name": "Client",
@@ -340,6 +340,10 @@
           },
           "event_day": {
             "type": "string"
+          },
+          "migration_duplicate": {
+            "type": "boolean",
+            "default": false
           }
         },
         "required": [
@@ -352,6 +356,112 @@
           "update": {},
           "delete": {}
         }
+      }
+    },
+    {
+      "entity_name": "VIPActivityLogArchive",
+      "entity_schema": {
+        "name": "VIPActivityLogArchive",
+        "type": "object",
+        "properties": {
+          "original_id": {
+            "type": "string"
+          },
+          "actor_username": {
+            "type": "string"
+          },
+          "actor_display_name": {
+            "type": "string"
+          },
+          "actor_type": {
+            "type": "string"
+          },
+          "action_type": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "target_key": {
+            "type": "string"
+          },
+          "target_label": {
+            "type": "string"
+          },
+          "old_value": {
+            "type": "string"
+          },
+          "new_value": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "event_time": {
+            "type": "string"
+          },
+          "event_day": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "archived_at": {
+            "type": "string"
+          },
+          "archive_month": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "original_id",
+          "action_type",
+          "message"
+        ]
+      }
+    },
+    {
+      "entity_name": "VIPAssetIndex",
+      "entity_schema": {
+        "name": "VIPAssetIndex",
+        "type": "object",
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          },
+          "storage": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "type": "string"
+          },
+          "use_count": {
+            "type": "number",
+            "default": 1
+          }
+        },
+        "required": [
+          "sha256",
+          "url"
+        ]
       }
     },
     {
@@ -823,112 +933,6 @@
           "update": {},
           "delete": {}
         }
-      }
-    },
-    {
-      "entity_name": "VIPActivityLogArchive",
-      "entity_schema": {
-        "name": "VIPActivityLogArchive",
-        "type": "object",
-        "properties": {
-          "original_id": {
-            "type": "string"
-          },
-          "actor_username": {
-            "type": "string"
-          },
-          "actor_display_name": {
-            "type": "string"
-          },
-          "actor_type": {
-            "type": "string"
-          },
-          "action_type": {
-            "type": "string"
-          },
-          "customer_id": {
-            "type": "string"
-          },
-          "customer_name": {
-            "type": "string"
-          },
-          "target_key": {
-            "type": "string"
-          },
-          "target_label": {
-            "type": "string"
-          },
-          "old_value": {
-            "type": "string"
-          },
-          "new_value": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "event_time": {
-            "type": "string"
-          },
-          "event_day": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "archived_at": {
-            "type": "string"
-          },
-          "archive_month": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "original_id",
-          "action_type",
-          "message"
-        ]
-      }
-    },
-    {
-      "entity_name": "VIPAssetIndex",
-      "entity_schema": {
-        "name": "VIPAssetIndex",
-        "type": "object",
-        "properties": {
-          "sha256": {
-            "type": "string"
-          },
-          "url": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "mime_type": {
-            "type": "string"
-          },
-          "size": {
-            "type": "number"
-          },
-          "storage": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string"
-          },
-          "last_used_at": {
-            "type": "string"
-          },
-          "use_count": {
-            "type": "number",
-            "default": 1
-          }
-        },
-        "required": [
-          "sha256",
-          "url"
-        ]
       }
     },
     {
