@@ -1043,26 +1043,113 @@ async function makeBusinessBackup(note){
   };
 }
 
+function businessBackupRow(row){
+  return backupRow(row);
+}
+function replaceBusinessEntityRows(backup,name,rows){
+  backup.entities[name]=(rows||[])
+    .filter(x=>name!=='VIPActivityLog'||x.migration_duplicate!==true)
+    .map(businessBackupRow);
+}
+function mergeBusinessEntityRows(backup,name,rows){
+  const list=Array.isArray(backup.entities[name])?[...backup.entities[name]]:[];
+  const index=new Map(list.map((x,i)=>[String(x.__old_id||''),i]));
+  for(const row of rows||[]){
+    if(name==='VIPActivityLog'&&row.migration_duplicate===true)continue;
+    const item=businessBackupRow(row),key=String(row.id||item.__old_id||'');
+    if(!key)continue;
+    const i=index.get(key);
+    if(i==null){index.set(key,list.length);list.push(item)}
+    else list[i]={...list[i],...item};
+  }
+  backup.entities[name]=list;
+}
+async function tryRefreshBusinessBackupFromCloud(backup){
+  const since=String(backup.snapshot_updated_at||backup.exported_at||'');
+  let refreshed=false,limited=false;
+
+  const fullNames=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPWorkflowProgress','VIPWorkflowFlowProgress'];
+  for(const name of fullNames){
+    try{
+      replaceBusinessEntityRows(backup,name,await getAllEntityRecords(name));
+      refreshed=true;
+    }catch(err){
+      if(/traffic volume limit|read traffic|limit exceeded/i.test(String(err?.message||err)))limited=true;
+      else throw err;
+    }
+  }
+
+  for(const name of ['VIPActivityLog','VIPActivityLogArchive']){
+    try{
+      const rows=since
+        ?unwrap(await base44.entities[name].filter({updated_date:{$gt:since}},'created_date',500,0))
+        :[];
+      mergeBusinessEntityRows(backup,name,rows);
+      refreshed=true;
+    }catch(err){
+      if(/traffic volume limit|read traffic|limit exceeded/i.test(String(err?.message||err)))limited=true;
+      else throw err;
+    }
+  }
+
+  try{
+    const rows=since
+      ?unwrap(await base44.entities.VIPWorkflowDefinition.filter({updated_date:{$gt:since}},'-updated_date',5,0))
+      :[];
+    if(rows.length)replaceBusinessEntityRows(backup,'VIPWorkflowDefinition',rows);
+    refreshed=true;
+  }catch(err){
+    if(/traffic volume limit|read traffic|limit exceeded/i.test(String(err?.message||err)))limited=true;
+    else throw err;
+  }
+
+  if(refreshed&&!limited)backup.snapshot_updated_at=new Date().toISOString();
+  return {refreshed,limited};
+}
 async function exportBusinessBackup(){
   const note=document.getElementById('backupNote');
   try{
     showMessage(note,'正在读取业务数据备份快照…','warn');
+
+    let source=null;
+    try{
+      const cached=localStorage.getItem('mvip_business_backup_cache_v1');
+      if(cached){
+        const parsed=JSON.parse(cached);
+        if(parsed?.format===BUSINESS_BACKUP_FORMAT&&parsed?.entities)source=parsed;
+      }
+    }catch(_){}
+
     const r=await fetch('./business-backup-snapshot.json?v='+Date.now(),{cache:'no-store'});
     if(!r.ok)throw new Error('备份快照读取失败：HTTP '+r.status);
-    const source=await r.json();
-    if(source?.format!==BUSINESS_BACKUP_FORMAT||!source?.entities)throw new Error('业务数据备份快照格式不正确');
+    const staticSource=await r.json();
+    if(staticSource?.format!==BUSINESS_BACKUP_FORMAT||!staticSource?.entities)throw new Error('业务数据备份快照格式不正确');
 
-    const backup={
-      ...source,
-      exported_at:new Date().toISOString(),
-      checksum_sha256:await sha256(JSON.stringify(source.entities))
-    };
-    const n=businessBackupCounts(backup.entities);
+    const cachedTime=Date.parse(source?.snapshot_updated_at||source?.exported_at||0)||0;
+    const staticTime=Date.parse(staticSource?.snapshot_updated_at||staticSource?.exported_at||0)||0;
+    if(!source||staticTime>cachedTime)source=staticSource;
+
+    const backup=safeClone(source);
+    const refresh=await tryRefreshBusinessBackupFromCloud(backup);
+
+    backup.exported_at=new Date().toISOString();
+    backup.counts=businessBackupCounts(backup.entities);
+    backup.checksum_sha256=await sha256(JSON.stringify(backup.entities));
+
+    try{
+      localStorage.setItem('mvip_business_backup_cache_v1',JSON.stringify(backup));
+    }catch(_){}
+
     downloadBackupObject(
       backup,
       'mosen_VIP-业务数据备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json'
     );
-    const snapshotTime=source.snapshot_updated_at||source.exported_at||'未知';
+
+    const n=backup.counts;
+    const snapshotTime=backup.snapshot_updated_at||source.snapshot_updated_at||source.exported_at||'未知';
+    const suffix=refresh.limited
+      ?'。Base44 当前仍处于读取限流状态，本次已自动使用最近可用快照，不会导致导出失败。'
+      :'。已在快照基础上合并最新增量数据。';
     showMessage(
       note,
       '业务数据备份已导出：业务员 '+n.sales_reps+
@@ -1073,8 +1160,8 @@ async function exportBusinessBackup(){
       '、历史日志 '+n.archived_activity_logs+
       '、话术配置 '+n.workflow_definitions+
       '、客户话术进度 '+(n.workflow_progress+n.workflow_flow_progress)+
-      '。备份快照更新时间：'+snapshotTime+'。本次导出未读取 Base44 数据表。',
-      'ok'
+      '。数据基准时间：'+snapshotTime+suffix,
+      refresh.limited?'warn':'ok'
     );
   }catch(err){
     showMessage(note,'业务数据备份失败：'+(err?.message||String(err)),'err');
