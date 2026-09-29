@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "updatedAt": "2026-09-29T13:41:52.430Z",
+  "items": [
+    {
+      "id": "investigation-us",
+      "title": "资金路径调查",
+      "description": "Whitfield & Crane Investigation Console。",
+      "path": "资金路径调查.html",
+      "category": "us",
+      "source": "static",
+      "order": 1,
+      "preview": "previews/investigation-us.png"
+    },
+    {
+      "id": "assistant-report-us",
+      "title": "资金路径调查助理报告",
+      "description": "Preliminary Completion 报告。",
+      "path": "资金路径调查助理报告.html",
+      "category": "us",
+      "source": "static",
+      "order": 2,
+      "preview": "previews/assistant-report-us.png"
+    },
+    {
+      "id": "docx-template-templates%2F%E5%AE%A2%E6%88%B7%E5%BB%BA%E6%A1%A3%E6%A8%A1%E6%9D%BF.docx",
+      "title": "客户建档模板",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2F%E5%AE%A2%E6%88%B7%E5%BB%BA%E6%A1%A3%E6%A8%A1%E6%9D%BF.docx",
+      "category": "us",
+      "source": "static",
+      "order": 3,
+      "preview": "previews/docx-template-templates%252F%25E5%25AE%25A2%25E6%2588%25B7%25E5%25BB%25BA%25E6%25A1%25A3%25E6%25A8%25A1%25E6%259D%25BF.docx.png"
+    },
+    {
+      "id": "lawyer-report-us",
+      "title": "资金路径调查律师报告",
+      "description": "Final Destination Report。",
+      "path": "资金路径调查律师报告.html",
+      "category": "us",
+      "source": "static",
+      "order": 4,
+      "preview": "previews/lawyer-report-us.png"
+    },
+    {
+      "id": "docx-template-templates%2F%E5%86%BB%E7%BB%93%E4%BB%A4%E5%92%8C%E8%B5%84%E9%87%91%E8%BF%94%E8%BF%98%E4%BB%A4%E6%A8%A1%E6%9D%BF.docx",
+      "title": "冻结令和资金返还令模板",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2F%E5%86%BB%E7%BB%93%E4%BB%A4%E5%92%8C%E8%B5%84%E9%87%91%E8%BF%94%E8%BF%98%E4%BB%A4%E6%A8%A1%E6%9D%BF.docx",
+      "category": "us",
+      "source": "static",
+      "order": 5,
+      "preview": "previews/docx-template-templates%252F%25E5%2586%25BB%25E7%25BB%2593%25E4%25BB%25A4%25E5%2592%258C%25E8%25B5%2584%25E9%2587%2591%25E8%25BF%2594%25E8%25BF%2598%25E4%25BB%25A4%25E6%25A8%25A1%25E6%259D%25BF.docx.png"
+    },
+    {
+      "id": "tether-freeze-us",
+      "title": "Tether 冻结报告",
+      "description": "Tether Judicial Freeze Console。",
+      "path": "Tether冻结报告.html",
+      "category": "us",
+      "source": "static",
+      "order": 6,
+      "preview": "previews/tether-freeze-us.png"
+    },
+    {
+      "id": "docx-template-templates%2FTether%E9%80%80%E6%AC%BE%E9%80%9A%E7%9F%A5%E6%A8%A1%E6%9D%BF.docx",
+      "title": "Tether退款通知模板",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2FTether%E9%80%80%E6%AC%BE%E9%80%9A%E7%9F%A5%E6%A8%A1%E6%9D%BF.docx",
+      "category": "us",
+      "source": "static",
+      "order": 7,
+      "preview": "previews/docx-template-templates%252FTether%25E9%2580%2580%25E6%25AC%25BE%25E9%2580%259A%25E7%259F%25A5%25E6%25A8%25A1%25E6%259D%25BF.docx.png"
+    },
+    {
+      "id": "docx-template-templates%2FTether%E9%80%80%E6%AC%BE%E9%80%9A%E7%9F%A5%E6%A8%A1%E6%9D%BF%EF%BC%88%E6%B2%A1%E6%9C%89%E5%88%A9%E6%B6%A6%EF%BC%89.docx",
+      "title": "Tether退款通知模板（没有利润）",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2FTether%E9%80%80%E6%AC%BE%E9%80%9A%E7%9F%A5%E6%A8%A1%E6%9D%BF%EF%BC%88%E6%B2%A1%E6%9C%89%E5%88%A9%E6%B6%A6%EF%BC%89.docx",
+      "category": "us",
+      "source": "static",
+      "order": 8,
+      "preview": "previews/docx-template-templates%252FTether%25E9%2580%2580%25E6%25AC%25BE%25E9%2580%259A%25E7%259F%25A5%25E6%25A8%25A1%25E6%259D%25BF%25EF%25BC%2588%25E6%25B2%25A1%25E6%259C%2589%25E5%2588%25A9%25E6%25B6%25A6%25EF%25BC%2589.docx.png"
+    },
+    {
+      "id": "tether-custody-us",
+      "title": "Tether 冻结资金保留",
+      "description": "Tether Refund Custody System。",
+      "path": "Tether冻结资金保留.html",
+      "category": "us",
+      "source": "static",
+      "order": 9,
+      "preview": "previews/tether-custody-us.png"
+    },
+    {
+      "id": "docx-template-templates%2F%E9%A6%96%E5%85%85%E5%87%8F%E5%85%8D%E6%A8%A1%E6%9D%BF.docx",
+      "title": "首充减免模板",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2F%E9%A6%96%E5%85%85%E5%87%8F%E5%85%8D%E6%A8%A1%E6%9D%BF.docx",
+      "category": "us",
+      "source": "static",
+      "order": 10,
+      "preview": "previews/docx-template-templates%252F%25E9%25A6%2596%25E5%2585%2585%25E5%2587%258F%25E5%2585%258D%25E6%25A8%25A1%25E6%259D%25BF.docx.png"
+    },
+    {
+      "id": "risk-us",
+      "title": "网站风险查询",
+      "description": "网站风险分析与查询控制台。",
+      "path": "网站风险查询.html",
+      "category": "us",
+      "source": "static",
+      "order": 11,
+      "preview": "previews/risk-us.png"
+    },
+    {
+      "id": "dynamic-bdb19292679f",
+      "title": "Onchain Wallet · Address Intelligence",
+      "description": "自定义 HTML 工具",
+      "path": "tools/Onchain钱包地址查询.html",
+      "category": "us",
+      "icon": "",
+      "source": "dynamic",
+      "order": 12,
+      "preview": "previews/dynamic-bdb19292679f.png"
+    },
+    {
+      "id": "investigation-de",
+      "title": "资金路径调查",
+      "description": "德国版本。",
+      "path": "资金路径调查-德国.html",
+      "category": "de",
+      "source": "static",
+      "order": 13,
+      "preview": "previews/investigation-de.png"
+    },
+    {
+      "id": "assistant-report-de",
+      "title": "资金路径调查助理报告",
+      "description": "德国版本。",
+      "path": "资金路径调查助理报告-德国.html",
+      "category": "de",
+      "source": "static",
+      "order": 14,
+      "preview": "previews/assistant-report-de.png"
+    },
+    {
+      "id": "docx-template-templates%2F%E5%AE%A2%E6%88%B7%E5%BB%BA%E6%A1%A3%E6%A8%A1%E6%9D%BF-%E5%BE%B7%E5%9B%BD.docx",
+      "title": "客户建档模板-德国",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2F%E5%AE%A2%E6%88%B7%E5%BB%BA%E6%A1%A3%E6%A8%A1%E6%9D%BF-%E5%BE%B7%E5%9B%BD.docx",
+      "category": "de",
+      "source": "static",
+      "order": 15,
+      "preview": "previews/docx-template-templates%252F%25E5%25AE%25A2%25E6%2588%25B7%25E5%25BB%25BA%25E6%25A1%25A3%25E6%25A8%25A1%25E6%259D%25BF-%25E5%25BE%25B7%25E5%259B%25BD.docx.png"
+    },
+    {
+      "id": "lawyer-report-de",
+      "title": "资金路径调查律师报告",
+      "description": "德国版本。",
+      "path": "资金路径调查律师报告-德国.html",
+      "category": "de",
+      "source": "static",
+      "order": 16,
+      "preview": "previews/lawyer-report-de.png"
+    },
+    {
+      "id": "docx-template-templates%2F%E5%86%BB%E7%BB%93%E4%BB%A4%E5%92%8C%E8%B5%84%E9%87%91%E8%BF%94%E8%BF%98%E4%BB%A4%E6%A8%A1%E6%9D%BF-%E5%BE%B7%E5%9B%BD.docx",
+      "title": "冻结令和资金返还令模板-德国",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2F%E5%86%BB%E7%BB%93%E4%BB%A4%E5%92%8C%E8%B5%84%E9%87%91%E8%BF%94%E8%BF%98%E4%BB%A4%E6%A8%A1%E6%9D%BF-%E5%BE%B7%E5%9B%BD.docx",
+      "category": "de",
+      "source": "static",
+      "order": 17,
+      "preview": "previews/docx-template-templates%252F%25E5%2586%25BB%25E7%25BB%2593%25E4%25BB%25A4%25E5%2592%258C%25E8%25B5%2584%25E9%2587%2591%25E8%25BF%2594%25E8%25BF%2598%25E4%25BB%25A4%25E6%25A8%25A1%25E6%259D%25BF-%25E5%25BE%25B7%25E5%259B%25BD.docx.png"
+    },
+    {
+      "id": "tether-freeze-de",
+      "title": "Tether 冻结报告",
+      "description": "德国版本。",
+      "path": "Tether冻结报告-德国.html",
+      "category": "de",
+      "source": "static",
+      "order": 18,
+      "preview": "previews/tether-freeze-de.png"
+    },
+    {
+      "id": "docx-template-templates%2FTether%E9%80%80%E6%AC%BE%E9%80%9A%E7%9F%A5%E6%A8%A1%E6%9D%BF-%E5%BE%B7%E5%9B%BD.docx",
+      "title": "Tether退款通知模板-德国",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2FTether%E9%80%80%E6%AC%BE%E9%80%9A%E7%9F%A5%E6%A8%A1%E6%9D%BF-%E5%BE%B7%E5%9B%BD.docx",
+      "category": "de",
+      "source": "static",
+      "order": 19,
+      "preview": "previews/docx-template-templates%252FTether%25E9%2580%2580%25E6%25AC%25BE%25E9%2580%259A%25E7%259F%25A5%25E6%25A8%25A1%25E6%259D%25BF-%25E5%25BE%25B7%25E5%259B%25BD.docx.png"
+    },
+    {
+      "id": "docx-template-templates%2FTether%E9%80%80%E6%AC%BE%E9%80%9A%E7%9F%A5%E6%A8%A1%E6%9D%BF%EF%BC%88%E6%B2%A1%E6%9C%89%E5%88%A9%E6%B6%A6%EF%BC%89-%E5%BE%B7%E5%9B%BD.docx",
+      "title": "Tether退款通知模板（没有利润）-德国",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2FTether%E9%80%80%E6%AC%BE%E9%80%9A%E7%9F%A5%E6%A8%A1%E6%9D%BF%EF%BC%88%E6%B2%A1%E6%9C%89%E5%88%A9%E6%B6%A6%EF%BC%89-%E5%BE%B7%E5%9B%BD.docx",
+      "category": "de",
+      "source": "static",
+      "order": 20,
+      "preview": "previews/docx-template-templates%252FTether%25E9%2580%2580%25E6%25AC%25BE%25E9%2580%259A%25E7%259F%25A5%25E6%25A8%25A1%25E6%259D%25BF%25EF%25BC%2588%25E6%25B2%25A1%25E6%259C%2589%25E5%2588%25A9%25E6%25B6%25A6%25EF%25BC%2589-%25E5%25BE%25B7%25E5%259B%25BD.docx.png"
+    },
+    {
+      "id": "tether-custody-de",
+      "title": "Tether 冻结资金保留",
+      "description": "德国版本。",
+      "path": "Tether冻结资金保留-德国.html",
+      "category": "de",
+      "source": "static",
+      "order": 21,
+      "preview": "previews/tether-custody-de.png"
+    },
+    {
+      "id": "docx-template-templates%2F%E9%A6%96%E5%85%85%E5%87%8F%E5%85%8D%E6%A8%A1%E6%9D%BF-%E5%BE%B7%E5%9B%BD.docx",
+      "title": "首充减免模板-德国",
+      "description": "DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。",
+      "path": "DOCX文件编辑器.html?template=templates%2F%E9%A6%96%E5%85%85%E5%87%8F%E5%85%8D%E6%A8%A1%E6%9D%BF-%E5%BE%B7%E5%9B%BD.docx",
+      "category": "de",
+      "source": "static",
+      "order": 22,
+      "preview": "previews/docx-template-templates%252F%25E9%25A6%2596%25E5%2585%2585%25E5%2587%258F%25E5%2585%258D%25E6%25A8%25A1%25E6%259D%25BF-%25E5%25BE%25B7%25E5%259B%25BD.docx.png"
+    },
+    {
+      "id": "risk-de",
+      "title": "网站风险查询",
+      "description": "德国版本。",
+      "path": "网站风险查询-德国.html",
+      "category": "de",
+      "source": "static",
+      "order": 23,
+      "preview": "previews/risk-de.png"
+    },
+    {
+      "id": "dynamic-ea598bf1d465",
+      "title": "Onchain Wallet · Adressanalyse",
+      "description": "自定义 HTML 工具",
+      "path": "tools/Onchain钱包地址查询-德国.html",
+      "category": "de",
+      "icon": "",
+      "source": "dynamic",
+      "order": 24,
+      "preview": "previews/dynamic-ea598bf1d465.png"
+    },
+    {
+      "id": "docx-editor",
+      "title": "DOCX 文件编辑器",
+      "description": "DOCX 中文内容替换与编辑工具。",
+      "path": "DOCX文件编辑器.html",
+      "category": "other",
+      "source": "static",
+      "order": 25,
+      "preview": "previews/docx-editor.png"
+    },
+    {
+      "id": "email-editor",
+      "title": "邮件编辑器",
+      "description": "邮件页面内容编辑与预览工具。",
+      "path": "邮件编辑器.html",
+      "category": "other",
+      "source": "static",
+      "order": 26,
+      "preview": "previews/email-editor.png"
+    },
+    {
+      "id": "dynamic-e04f819fb860",
+      "title": "维权流程",
+      "description": "自定义编排话术、标题、图片、附件与工具快捷方式，并公开同步。",
+      "path": "tools/聊天流程编辑器.html",
+      "category": "other",
+      "icon": "",
+      "source": "dynamic",
+      "order": 27,
+      "preview": "previews/dynamic-e04f819fb860.png"
+    }
+  ]
+}
