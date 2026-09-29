@@ -26,6 +26,11 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
 .step-modal-actions{position:sticky;bottom:-20px;z-index:20;margin:14px -20px -20px!important;padding:12px 20px;background:rgba(255,255,255,.98);backdrop-filter:blur(10px);border-top:1px solid #eef1f5;box-shadow:0 -8px 24px rgba(15,23,42,.05)}.grid{display:grid;grid-template-columns:1fr 180px;gap:10px}.field{display:grid;gap:5px;margin-bottom:10px}.field label{font-size:11px;color:#667085;font-weight:800}.field input,.field select,.field textarea{width:100%;border:1px solid #d9dee7;border-radius:10px;padding:9px 10px;outline:none;background:#fff}.field textarea{min-height:115px;resize:vertical}.field textarea.large{min-height:150px}.field input:focus,.field textarea:focus,.field select:focus{border-color:#9b87ee;box-shadow:0 0 0 3px rgba(109,74,255,.08)}
 .notice{margin-top:10px;padding:9px 11px;border-radius:9px;background:#f6f8fa;font-size:11px;color:#667085}.notice.ok{background:#effaf5;color:#087443}.notice.err{background:#fff1f0;color:#b42318}
 .asset-section{margin-top:14px;padding-top:14px;border-top:1px solid #eef1f5}.asset-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}.asset-head b{font-size:12px}.asset-head span{font-size:10px;color:#8a93a4}.asset-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 9px;border:1px solid #e3e7ee;border-radius:9px;background:#fafbfc;margin-top:6px}.asset-row .name{min-width:0;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.asset-row .meta{font-size:9px;color:#98a2b3;margin-top:2px}.asset-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;margin-top:7px}.asset-add.three{grid-template-columns:140px minmax(0,1fr) auto}.file-label{position:relative;overflow:hidden}.file-label input{position:absolute;inset:0;opacity:0;cursor:pointer}.empty-mini{font-size:10px;color:#98a2b3;padding:7px 0}
+.step-context-menu{position:fixed;z-index:2147483000;width:190px;padding:6px;background:#fff;border:1px solid #e4e8ef;border-radius:12px;box-shadow:0 18px 50px rgba(15,23,42,.18);display:grid;gap:3px}
+.step-context-menu[hidden]{display:none}
+.step-context-menu button{width:100%;border:0;background:transparent;border-radius:8px;padding:9px 10px;text-align:left;font-size:12px;font-weight:800;color:#344054;cursor:pointer}
+.step-context-menu button:hover{background:#f2efff;color:#5f3fd0}
+.step-context-menu .menu-title{padding:5px 10px 4px;font-size:9px;font-weight:900;color:#98a2b3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media(max-width:850px){.app{grid-template-columns:1fr}.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}.flow-list{display:flex;overflow:auto}.flow-item{min-width:190px}.main{padding:12px}.preview{grid-template-columns:1fr}.toolbar{top:5px}}
 </style>
 </head>
@@ -65,6 +70,12 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
     </div>
     <div class="steps" id="stepList"></div>
   </main>
+</div>
+
+<div class="step-context-menu" id="stepContextMenu" hidden>
+  <div class="menu-title" id="stepContextTitle">话术操作</div>
+  <button type="button" data-insert="above">＋ 在上方添加新话术</button>
+  <button type="button" data-insert="below">＋ 在下方添加新话术</button>
 </div>
 
 <div class="modal" id="stepModal" hidden>
@@ -125,6 +136,7 @@ if(localStorage.getItem('mVIP_admin')!=='1'){
 const $=s=>document.querySelector(s);
 let row=null,state={workflows:[]},activeFlowId='',editingStepId='',busy=false;
 let pendingAttachments=[],pendingToolLinks=[],toolCatalog=[];
+let pendingInsertIndex=null,contextStepId='';
 
 function uid(prefix='step'){return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)}
 function unwrap(v){return Array.isArray(v)?v:(v?.items||[])}
@@ -297,6 +309,27 @@ async function persist(message='已保存'){
   }finally{busy=false}
 }
 
+function hideStepContextMenu(){
+  const menu=$('#stepContextMenu');
+  if(menu)menu.hidden=true;
+  contextStepId='';
+}
+function showStepContextMenu(e,id){
+  e.preventDefault();
+  e.stopPropagation();
+  contextStepId=String(id||'');
+  const flow=activeFlow();
+  const step=(flow?.steps||[]).find(x=>String(x.id)===contextStepId);
+  $('#stepContextTitle').textContent=step?.title||'话术操作';
+  const menu=$('#stepContextMenu');
+  menu.hidden=false;
+  const pad=10,w=190,h=92;
+  const x=Math.min(e.clientX,window.innerWidth-w-pad);
+  const y=Math.min(e.clientY,window.innerHeight-h-pad);
+  menu.style.left=Math.max(pad,x)+'px';
+  menu.style.top=Math.max(pad,y)+'px';
+}
+
 function render(){
   ensureCategories();
   const flows=state.workflows||[];
@@ -344,14 +377,17 @@ function render(){
     card.querySelector('.delete-step').onclick=()=>deleteStep(id);
     card.querySelector('.move-up').onclick=()=>moveStep(id,-1);
     card.querySelector('.move-down').onclick=()=>moveStep(id,1);
+    card.addEventListener('contextmenu',e=>showStepContextMenu(e,id));
   });
 }
 
-function openStep(id=''){
+function openStep(id='',insertIndex=null,insertLabel=''){
   const flow=activeFlow(); if(!flow)return;
+  hideStepContextMenu();
   editingStepId=id;
+  pendingInsertIndex=id?null:(Number.isInteger(insertIndex)?insertIndex:null);
   const s=(flow.steps||[]).find(x=>String(x.id)===String(id))||{title:'',type:'话术',contentZh:'',contentForeign:'',note:''};
-  $('#stepModalTitle').textContent=id?'编辑话术':'新增话术';
+  $('#stepModalTitle').textContent=id?'编辑话术':(insertLabel||'新增话术');
   $('#stepTitle').value=s.title||'';
   $('#stepType').value=s.type||'话术';
   $('#stepZh').value=s.contentZh||'';
@@ -365,7 +401,7 @@ function openStep(id=''){
   $('#stepModal').hidden=false;
   setTimeout(()=>$('#stepTitle').focus(),30);
 }
-function closeStep(){editingStepId='';$('#stepModal').hidden=true}
+function closeStep(){editingStepId='';pendingInsertIndex=null;$('#stepModal').hidden=true}
 async function saveStep(){
   const flow=activeFlow();if(!flow)return;
   const title=$('#stepTitle').value.trim(),type=$('#stepType').value||'话术',contentZh=$('#stepZh').value.trim(),contentForeign=$('#stepForeign').value.trim(),note=$('#stepNote').value.trim();
@@ -375,7 +411,13 @@ async function saveStep(){
     const idx=flow.steps.findIndex(x=>String(x.id)===String(editingStepId));
     if(idx>=0)flow.steps[idx]={...flow.steps[idx],title,type,contentZh,contentForeign,note,attachments:safeClone(pendingAttachments),toolLinks:safeClone(pendingToolLinks)};
   }else{
-    flow.steps.push({id:uid(),title,type,contentZh,contentForeign,note,attachments:safeClone(pendingAttachments),toolLinks:safeClone(pendingToolLinks)});
+    const newStep={id:uid(),title,type,contentZh,contentForeign,note,attachments:safeClone(pendingAttachments),toolLinks:safeClone(pendingToolLinks)};
+    if(Number.isInteger(pendingInsertIndex)){
+      const at=Math.max(0,Math.min(pendingInsertIndex,flow.steps.length));
+      flow.steps.splice(at,0,newStep);
+    }else{
+      flow.steps.push(newStep);
+    }
   }
   const ok=await persist('话术已保存');
   if(ok){closeStep();render()}
@@ -396,6 +438,14 @@ async function moveStep(id,delta){
 }
 
 $('#addStep').onclick=()=>openStep('');
+$('#stepContextMenu').querySelectorAll('[data-insert]').forEach(btn=>btn.onclick=()=>{
+  const flow=activeFlow();
+  if(!flow||!contextStepId)return hideStepContextMenu();
+  const idx=(flow.steps||[]).findIndex(x=>String(x.id)===String(contextStepId));
+  if(idx<0)return hideStepContextMenu();
+  const below=btn.dataset.insert==='below';
+  openStep('',idx+(below?1:0),below?'在下方添加新话术':'在上方添加新话术');
+});
 $('#closeStepModal').onclick=closeStep;$('#cancelStep').onclick=closeStep;$('#saveStep').onclick=saveStep;
 
 $('#attachmentFile').addEventListener('change',async e=>{
@@ -489,7 +539,15 @@ $('#deleteFlow').onclick=async()=>{
   activeFlowId=state.workflows[0]?.id||'';
   if(await persist('流程已删除'))render();
 };
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#stepModal').hidden)closeStep()});
+document.addEventListener('click',e=>{if(!e.target.closest('#stepContextMenu'))hideStepContextMenu()});
+window.addEventListener('scroll',hideStepContextMenu,true);
+window.addEventListener('resize',hideStepContextMenu);
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    if(!$('#stepContextMenu').hidden){hideStepContextMenu();return}
+    if(!$('#stepModal').hidden)closeStep();
+  }
+});
 loadToolCatalog();load();
 </script>
 </body>
