@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 
 const html=await fs.readFile('toolbox/index.html','utf8');
 const dynamic=JSON.parse(await fs.readFile('toolbox/tools/index.json','utf8')).tools||[];
+const templates=JSON.parse(await fs.readFile('toolbox/templates/index.json','utf8')).templates||[];
 const orderDoc=JSON.parse(await fs.readFile('toolbox/global-order.json','utf8'));
 const order=orderDoc.toolCenter||{us:[],de:[],other:[]};
 
@@ -25,7 +26,20 @@ for(const cat of ['us','de','other']){
     });
   }
 }
-const map=new Map(staticItems.map(x=>[String(x.id),x]));
+const map=new Map(staticItems.filter(x=>!String(x.id).startsWith('docx-template-')).map(x=>[String(x.id),x]));
+for(const tpl of templates){
+  if(!tpl?.path)continue;
+  const category=String(tpl.region||'us').toLowerCase()==='de'?'de':'us';
+  const id='docx-template-'+encodeURIComponent(String(tpl.path));
+  map.set(id,{
+    id,
+    title:String(tpl.name||'DOCX 模板').replace(/\.docx$/i,''),
+    description:'DOCX 文件快捷入口，点击后直接进入编辑器并打开该文件。',
+    path:'DOCX文件编辑器.html?template='+encodeURIComponent(String(tpl.path)),
+    category,
+    source:'template'
+  });
+}
 for(const t of dynamic){
   if(!t?.id||!t?.path)continue;
   map.set(String(t.id),{
