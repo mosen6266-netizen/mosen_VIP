@@ -1704,8 +1704,18 @@ async function fetchCustomerPage(){
   if(!customers.length&&customerPage>1){customerPage--;return fetchCustomerPage()}
 }
 async function refreshCustomerCounts(){
-  const rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'key',limit:500}));
-  const global=rows.find(x=>x.key==='global');
+  let rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'key',limit:500}));
+  let global=rows.find(x=>x.key==='global');
+  try{
+    const newest=unwrap(await base44.entities.VIPCustomer.list({sort:'-updated_date',limit:1}))[0];
+    const statTime=String(global?.updated_at||global?.updated_date||'');
+    const customerTime=String(newest?.updated_date||'');
+    if(!global||(customerTime&&customerTime>statTime)){
+      await reconcileDashboardStats(base44);
+      rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'key',limit:500}));
+      global=rows.find(x=>x.key==='global');
+    }
+  }catch(_){}
   if(global){
     totalCustomerCount=Number(global.active_customers||0);
     totalArchivedCount=Number(global.archived_customers||0);
