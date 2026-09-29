@@ -13,6 +13,7 @@ const loginView=document.getElementById('loginView'),appView=document.getElement
 const customerModal=document.getElementById('customerModal'),customerEditForm=document.getElementById('customerEditForm'),customerEditNote=document.getElementById('customerEditNote');
 
 function unwrap(v){return Array.isArray(v)?v:(v?.items||[])}
+function deepCloneValue(v){return globalThis.structuredClone?structuredClone(v):JSON.parse(JSON.stringify(v))}
 async function sha256(v){const b=new TextEncoder().encode(v);const h=await crypto.subtle.digest('SHA-256',b);return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 
 function showAdminView(view,repUsername=''){
@@ -755,7 +756,7 @@ async function restoreEntities(entities,workflowAssetUrlMap={}){
   for(const row of e.VIPWorkflowDefinition||[]){
     const clean=withoutOldId(row);
     if(clean.bundle&&workflowAssetUrlMap&&Object.keys(workflowAssetUrlMap).length){
-      clean.bundle=safeClone(clean.bundle);
+      clean.bundle=deepCloneValue(clean.bundle);
       for(const flow of clean.bundle.workflows||[]){
         for(const step of flow.steps||[]){
           for(const att of step.attachments||[]){
@@ -1129,7 +1130,7 @@ async function exportBusinessBackup(){
     const staticTime=Date.parse(staticSource?.snapshot_updated_at||staticSource?.exported_at||0)||0;
     if(!source||staticTime>cachedTime)source=staticSource;
 
-    const backup=safeClone(source);
+    const backup=deepCloneValue(source);
     const refresh=await tryRefreshBusinessBackupFromCloud(backup);
 
     backup.exported_at=new Date().toISOString();
