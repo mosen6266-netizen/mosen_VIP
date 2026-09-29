@@ -109,10 +109,21 @@
     return new TextDecoder().decode(bytes);
   }
 
-  function askWriteToken(){
-    return (window.prompt(
-      '保存全局设置需要 GitHub 写入授权。\n\n请粘贴仅对 mosen6266 仓库具有 Contents: Read and write 权限的 Fine-grained personal access token。\n\n令牌只用于本次保存请求，不会写入网页、仓库或浏览器存储。请不要把令牌发送给任何人。'
-    ) || '').trim();
+  async function ensureVipDialogs(){
+    if(window.vipPrompt)return;
+    await new Promise((resolve,reject)=>{
+      const existing=document.querySelector('script[data-vip-dialog-loader]');
+      if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',reject,{once:true});return}
+      const s=document.createElement('script');s.src='/mosen_VIP/vip-dialogs.js';s.dataset.vipDialogLoader='1';s.onload=resolve;s.onerror=reject;document.head.appendChild(s);
+    });
+  }
+
+  async function askWriteToken(){
+    await ensureVipDialogs();
+    return ((await window.vipPrompt(
+      '保存全局设置需要 GitHub 写入授权。\n\n请粘贴仅对 mosen_VIP 仓库具有 Contents: Read and write 权限的 Fine-grained personal access token。\n\n令牌只用于本次保存请求，不会写入网页、仓库或浏览器存储。请不要把令牌发送给任何人。',
+      {title:'GitHub 写入授权',inputType:'password',placeholder:'Fine-grained personal access token',confirmText:'继续'}
+    )) || '').trim();
   }
 
   async function readRepoConfigForWrite(token){
@@ -132,7 +143,7 @@
   }
 
   async function saveGlobalSection(section, value){
-    const token = askWriteToken();
+    const token = await askWriteToken();
     if(!token) throw new Error('已取消全局保存。');
     const current = await readRepoConfigForWrite(token);
     const next = Object.assign(blankConfig(), current.data || {});
