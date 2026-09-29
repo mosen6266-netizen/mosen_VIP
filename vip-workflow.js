@@ -50,7 +50,7 @@
       '.vip-flow-step-head{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #eef1f5}.vip-flow-check{width:19px;height:19px;accent-color:#16a36a;cursor:pointer}.vip-flow-num{width:25px;height:25px;border-radius:8px;background:#f1edff;color:#633fd7;display:grid;place-items:center;font-size:10px;font-weight:900;flex:0 0 auto}.vip-flow-step-title{min-width:0;flex:1}.vip-flow-step-title strong{font-size:13px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vip-flow-step-title span{font-size:10px;color:#8a93a4;margin-top:2px;display:block}.vip-flow-copy{border:0;border-radius:8px;background:#6d4aff;color:#fff;padding:7px 9px;font-size:11px;font-weight:800;cursor:pointer;white-space:nowrap}.vip-flow-copy:hover{background:#5837d0}',
       '.vip-flow-step-body{padding:8px 12px 10px}.vip-flow-language{font-size:9px;font-weight:900;color:#8a93a4;margin:0 0 3px;letter-spacing:.05em}.vip-flow-text{white-space:normal;line-height:1.45;font-size:12px;color:#293449;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;text-overflow:ellipsis;word-break:break-word}.vip-flow-text.zh{height:44px;box-sizing:border-box;background:#f7f8fa;border-radius:8px;padding:6px 9px;margin-bottom:6px;color:#5a6577}.vip-flow-text.foreign{height:36px;font-size:12.5px}',
       '.vip-flow-note{margin-top:6px;border-left:3px solid #d6cdfa;background:#faf8ff;border-radius:0 8px 8px 0;padding:6px 8px;font-size:10px;color:#6d6680;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-      '.vip-flow-links{display:flex;flex-wrap:nowrap;gap:5px;margin-top:6px;overflow:hidden}.vip-flow-pill{display:inline-flex;align-items:center;gap:4px;text-decoration:none;border:1px solid #dfe3ea;border-radius:8px;background:#f8fafc;color:#344054;padding:5px 7px;font-size:10px;font-weight:800;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}.vip-flow-pill.tool{border-color:#bde1de;background:#effaf8;color:#137b73}.vip-flow-pill:hover{filter:brightness(.97)}',
+      '.vip-flow-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px;overflow:visible}.vip-flow-pill{display:inline-flex;align-items:center;gap:4px;text-decoration:none;border:1px solid #dfe3ea;border-radius:8px;background:#f8fafc;color:#344054;padding:5px 7px;font-size:10px;font-weight:800;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis}.vip-flow-pill.tool{border-color:#bde1de;background:#effaf8;color:#137b73}.vip-flow-pill:hover{filter:brightness(.97)}.vip-flow-image-thumb{width:72px;height:54px;border:1px solid #dfe3ea;border-radius:8px;background:#fff;padding:0;overflow:hidden;cursor:zoom-in;display:block;flex:0 0 auto}.vip-flow-image-thumb img{width:100%;height:100%;object-fit:cover;display:block}.vip-flow-image-wrap{display:flex;flex-direction:column;gap:3px;max-width:86px}.vip-flow-image-name{font-size:9px;color:#667085;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.vip-flow-viewer{position:fixed;inset:0;z-index:2147483647;background:rgba(8,12,20,.86);display:grid;place-items:center;padding:28px}.vip-flow-viewer[hidden]{display:none}.vip-flow-viewer-stage{position:relative;max-width:min(94vw,1500px);max-height:92vh;display:grid;place-items:center}.vip-flow-viewer img{max-width:94vw;max-height:88vh;object-fit:contain;border-radius:10px;box-shadow:0 24px 80px rgba(0,0,0,.4);background:#fff}.vip-flow-viewer-close{position:absolute;top:-18px;right:-18px;width:38px;height:38px;border:0;border-radius:999px;background:#fff;color:#111827;font-size:22px;font-weight:900;cursor:pointer;box-shadow:0 8px 30px rgba(0,0,0,.24)}.vip-flow-viewer-caption{position:absolute;left:0;right:0;bottom:-25px;text-align:center;color:#fff;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.vip-flow-empty{background:#fff;border:1px dashed #cfd5df;border-radius:15px;padding:34px;text-align:center;color:#7b8495}',
       '.vip-flow-toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#1f2937;color:#fff;padding:10px 14px;border-radius:10px;font-size:12px;font-weight:700;opacity:0;pointer-events:none;transition:.2s;z-index:100000}.vip-flow-toast.show{opacity:1;transform:translate(-50%,0)}',
       'body.vip-flow-open{overflow:hidden}',
@@ -84,6 +84,32 @@
     if(!path)return '#';
     if(/^https?:/i.test(path))return path;
     return OLD_BASE+String(path).replace(/^\.\.\//,'').replace(/^\.\//,'');
+  }
+
+  function isImageAttachment(a){
+    var type=String(a&&a.type||'').toLowerCase();
+    var name=String(a&&a.name||a&&a.url||'').toLowerCase();
+    var src=String(a&&a.data||a&&a.url||'').toLowerCase();
+    return type.indexOf('image/')===0||/^data:image\//.test(src)||/\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(name);
+  }
+
+  function openImageViewer(src,name){
+    if(!src)return;
+    var viewer=document.getElementById('vipFlowImageViewer');
+    if(!viewer){
+      viewer=document.createElement('div');
+      viewer.id='vipFlowImageViewer';
+      viewer.className='vip-flow-viewer';
+      viewer.hidden=true;
+      viewer.innerHTML='<div class="vip-flow-viewer-stage"><button type="button" class="vip-flow-viewer-close" aria-label="关闭">×</button><img alt="附件预览"><div class="vip-flow-viewer-caption"></div></div>';
+      document.body.appendChild(viewer);
+      viewer.addEventListener('click',function(e){if(e.target===viewer)viewer.hidden=true;});
+      viewer.querySelector('.vip-flow-viewer-close').addEventListener('click',function(){viewer.hidden=true;});
+    }
+    viewer.querySelector('img').src=src;
+    viewer.querySelector('img').alt=name||'附件预览';
+    viewer.querySelector('.vip-flow-viewer-caption').textContent=name||'';
+    viewer.hidden=false;
   }
 
   async function loadBundle(force){
@@ -391,7 +417,11 @@
           html+='<div class="vip-flow-links">';
           attachments.forEach(function(a){
             var href=absAsset(a.url||a.data||'');
-            html+='<a class="vip-flow-pill" href="'+esc(href)+'" target="_blank" rel="noopener">附件 · '+esc(a.name||'查看')+'</a>';
+            if(isImageAttachment(a)){
+              html+='<div class="vip-flow-image-wrap"><button type="button" class="vip-flow-image-thumb" data-vip-image="'+esc(href)+'" data-vip-image-name="'+esc(a.name||'图片附件')+'"><img src="'+esc(href)+'" alt="'+esc(a.name||'图片附件')+'" loading="lazy"></button><div class="vip-flow-image-name" title="'+esc(a.name||'图片附件')+'">'+esc(a.name||'图片附件')+'</div></div>';
+            }else{
+              html+='<a class="vip-flow-pill" href="'+esc(href)+'" target="_blank" rel="noopener">附件 · '+esc(a.name||'查看')+'</a>';
+            }
           });
           tools.forEach(function(t){
             html+='<a class="vip-flow-pill tool" href="'+esc(absTool(t.path))+'" target="_blank" rel="noopener">快捷方式 · '+esc(t.title||t.path)+'</a>';
@@ -424,6 +454,12 @@
         setCompleted(progress,flow.id,done);
         saveProgress(currentCustomer.id,progress);
         renderAll(overlay,bundle,progress,flow.id);
+      });
+    });
+
+    main.querySelectorAll('[data-vip-image]').forEach(function(btn){
+      btn.addEventListener('click',function(){
+        openImageViewer(btn.dataset.vipImage,btn.dataset.vipImageName||'图片附件');
       });
     });
 
@@ -486,7 +522,11 @@
   }
 
   document.addEventListener('keydown',function(e){
-    if(e.key==='Escape'&&document.getElementById('vipFlowOverlay'))closePanel();
+    if(e.key==='Escape'){
+      var viewer=document.getElementById('vipFlowImageViewer');
+      if(viewer&&!viewer.hidden){viewer.hidden=true;return;}
+      if(document.getElementById('vipFlowOverlay'))closePanel();
+    }
   });
 
   async function mountInline(container,customerId,customerName){
