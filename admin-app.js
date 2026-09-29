@@ -57,9 +57,90 @@ document.querySelector('.sidebar-item[data-view="workflows"]').onclick=()=>showA
 document.querySelector('.sidebar-item[data-view="logs"]').onclick=()=>showAdminView('logs');
 document.querySelector('.sidebar-item[data-view="backup"]').onclick=()=>showAdminView('backup');
 
+
+function integrityLogKey(x){
+  return x?.legacy_source_id
+    ?'l:'+String(x.legacy_source_id)
+    :'n:'+[
+      x?.action_type||'',x?.event_time||'',x?.customer_name||'',x?.target_label||'',x?.message||''
+    ].join('|');
+}
+async function runIntegrityRepairV2(){
+  const key='mVIP_integrity_repair_v2';
+  if(sessionStorage.getItem(key))return;
+  try{
+    const snapRows=unwrap(await base44.entities.VIPBusinessBackupSnapshot.filter({key:'main'},'-updated_date',1,0));
+    const entities=snapRows[0]?.payload?.entities||{};
+    if(!Array.isArray(entities.VIPActivityLog)||!Array.isArray(entities.VIPCustomer)||!Array.isArray(entities.VIPProgressStage)){
+      sessionStorage.setItem(key,'skip');return;
+    }
+
+    const [currentCustomers,currentProgress,currentLogs,currentFlows]=await Promise.all([
+      getAllEntityRecords('VIPCustomer'),
+      getAllEntityRecords('VIPProgressStage'),
+      getAllEntityRecords('VIPActivityLog'),
+      getAllEntityRecords('VIPWorkflowFlowProgress')
+    ]);
+
+    const customerByLegacy=new Map(currentCustomers.map(x=>[String(x.legacy_source_id||''),x]));
+    const progressByLegacy=new Map(currentProgress.map(x=>[String(x.legacy_source_id||''),x]));
+    const oldCustomerToCurrent=new Map();
+    const oldProgressToCurrent=new Map();
+    for(const x of entities.VIPCustomer||[]){
+      const cur=customerByLegacy.get(String(x.legacy_source_id||''));
+      if(x.__old_id&&cur?.id)oldCustomerToCurrent.set(String(x.__old_id),String(cur.id));
+    }
+    for(const x of entities.VIPProgressStage||[]){
+      const cur=progressByLegacy.get(String(x.legacy_source_id||''));
+      if(x.__old_id&&cur?.id)oldProgressToCurrent.set(String(x.__old_id),String(cur.id));
+    }
+
+    const expectedGroups=new Map();
+    for(const x of entities.VIPActivityLog||[]){
+      const k=integrityLogKey(x);
+      if(!expectedGroups.has(k))expectedGroups.set(k,[]);
+      expectedGroups.get(k).push(x);
+    }
+    const currentGroups=new Map();
+    for(const x of currentLogs){
+      if(x.migration_duplicate===true)continue;
+      const k=integrityLogKey(x);
+      if(!currentGroups.has(k))currentGroups.set(k,[]);
+      currentGroups.get(k).push(x);
+    }
+
+    for(const [k,expected] of expectedGroups){
+      const have=currentGroups.get(k)||[];
+      if(have.length>=expected.length)continue;
+      const missing=expected.slice(have.length);
+      for(const source of missing){
+        const clean=withoutOldId(source);
+        if(clean.customer_id&&oldCustomerToCurrent.has(String(clean.customer_id)))clean.customer_id=oldCustomerToCurrent.get(String(clean.customer_id));
+        if(clean.target_key&&oldProgressToCurrent.has(String(clean.target_key)))clean.target_key=oldProgressToCurrent.get(String(clean.target_key));
+        await retryRateLimited(()=>base44.entities.VIPActivityLog.create(clean),8);
+        await waitMs(140);
+      }
+    }
+
+    const validCustomerIds=new Set(currentCustomers.filter(x=>x.duplicate_record!==true).map(x=>String(x.id)));
+    for(const row of currentFlows){
+      if(row.flow_id==='__orphan__'||!validCustomerIds.has(String(row.customer_id||''))){
+        try{await retryRateLimited(()=>base44.entities.VIPWorkflowFlowProgress.delete(row.id),8)}catch(_){}
+        await waitMs(120);
+      }
+    }
+
+    await reconcileDashboardStats(base44);
+    sessionStorage.setItem(key,'ok');
+  }catch(err){
+    console.warn('integrity repair deferred',err);
+  }
+}
+
 async function enter(){
   loginView.hidden=true;appView.hidden=false;
   document.getElementById('logDate').value=new Date().toISOString().slice(0,10);
+  await runIntegrityRepairV2();
   await Promise.all([loadReps(),loadFields(),loadProgress(),loadLogs(),refreshCustomerCounts()]);
   showAdminView('all');
   try{
@@ -997,7 +1078,7 @@ async function collectBusinessBackupEntities(){
     VIPActivityLogArchive:rows[5].map(backupRow),
     VIPWorkflowDefinition:rows[6].map(backupRow),
     VIPWorkflowProgress:rows[7].map(backupRow),
-    VIPWorkflowFlowProgress:rows[8].map(backupRow)
+    VIPWorkflowFlowProgress:rows[8].filter(x=>x.flow_id!=='__orphan__'&&x.customer_id).map(backupRow)
   };
 }
 
@@ -1059,6 +1140,7 @@ function mergeBusinessEntityRows(backup,name,rows){
   for(const row of rows||[]){
     if(name==='VIPActivityLog'&&row.migration_duplicate===true)continue;
     if(name==='VIPCustomer'&&row.duplicate_record===true)continue;
+    if(name==='VIPWorkflowFlowProgress'&&(row.flow_id==='__orphan__'||!row.customer_id))continue;
     const item=businessBackupRow(row),key=String(row.id||item.__old_id||'');
     if(!key)continue;
     const i=index.get(key);
