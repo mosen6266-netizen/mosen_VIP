@@ -171,6 +171,37 @@
     return String(customerId)+'::'+String(flowId);
   }
 
+  async function dedupeFlowRows(base44,key,rows){
+    rows=Array.isArray(rows)?rows.filter(Boolean):[];
+    if(rows.length<=1)return rows[0]||null;
+    rows.sort(function(a,b){
+      return Date.parse(b.updated_at||b.updated_date||0)-Date.parse(a.updated_at||a.updated_date||0);
+    });
+    var keep=rows[0];
+    var merged=new Set();
+    rows.forEach(function(r){
+      (Array.isArray(r.completed_step_ids)?r.completed_step_ids:[]).forEach(function(id){merged.add(String(id));});
+    });
+    var payload={
+      unique_key:key,
+      customer_id:String(keep.customer_id||''),
+      customer_name:keep.customer_name||'',
+      flow_id:String(keep.flow_id||''),
+      completed_step_ids:Array.from(merged),
+      hide_done:rows.some(function(r){return r.hide_done===true;}),
+      is_active:rows.some(function(r){return r.is_active===true;}),
+      version:Math.max.apply(null,rows.map(function(r){return Number(r.version||1);})) + 1,
+      updated_by:keep.updated_by||'dedupe',
+      updated_at:new Date().toISOString(),
+      migrated_from_legacy:rows.every(function(r){return r.migrated_from_legacy===true;})
+    };
+    try{await base44.entities.VIPWorkflowFlowProgress.update(keep.id,payload);}catch(_){}
+    for(var i=1;i<rows.length;i++){
+      try{await base44.entities.VIPWorkflowFlowProgress.delete(rows[i].id);}catch(_){}
+    }
+    return Object.assign({},keep,payload);
+  }
+
   async function loadCloudProgress(customerId){
     var local=loadProgress(customerId);
     var key=String(customerId);
@@ -231,9 +262,9 @@
         var desired=new Set(Array.isArray(localFlow.completed)?localFlow.completed.map(String):[]);
         var cached=cloudRows[key]||null;
 
-        var found=await base44.entities.VIPWorkflowFlowProgress.filter({unique_key:key},'-updated_date',2,0);
+        var found=await base44.entities.VIPWorkflowFlowProgress.filter({unique_key:key},'-updated_date',5,0);
         var rows=Array.isArray(found)?found:(found&&found.items)||[];
-        var remote=rows[0]||null;
+        var remote=await dedupeFlowRows(base44,key,rows);
         var rowId=remote&&remote.id||cached&&cached.id||'';
         var remoteVersion=Number(remote&&remote.version||cached&&cached.version||0);
         var remoteCompleted=new Set(Array.isArray(remote&&remote.completed_step_ids)?remote.completed_step_ids.map(String):(cached&&cached.completed||[]));
@@ -266,6 +297,18 @@
         }else{
           var created=await base44.entities.VIPWorkflowFlowProgress.create(payload);
           rowId=created&&created.id||'';
+          // Two devices can create the same customer+flow at almost the same time.
+          // Re-read once and collapse any duplicate rows back to the stable unique_key.
+          try{
+            var verifyResult=await base44.entities.VIPWorkflowFlowProgress.filter({unique_key:key},'-updated_date',5,0);
+            var verifyRows=Array.isArray(verifyResult)?verifyResult:(verifyResult&&verifyResult.items)||[];
+            var canonical=await dedupeFlowRows(base44,key,verifyRows);
+            if(canonical&&canonical.id){
+              rowId=canonical.id;
+              payload.completed_step_ids=Array.isArray(canonical.completed_step_ids)?canonical.completed_step_ids.map(String):payload.completed_step_ids;
+              payload.version=Number(canonical.version||payload.version);
+            }
+          }catch(_){}
         }
 
         cloudRows[key]={id:rowId,version:payload.version,completed:payload.completed_step_ids.slice(),updatedAt:payload.updated_at};
