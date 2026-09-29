@@ -1,5 +1,5 @@
 import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, downloadCsv, uiAlert, uiConfirm, uiPrompt, localDateKey, buildCustomerSearchText, readDashboardStat, adjustDashboardStat, createEntityBatch } from './base44.js';
-import { customerSearchFields, ensureCustomerIndex, initGlobalSearch, runDailyMaintenance, smartCustomerSubscription, reconcileDashboardStats } from './vip-optimizations.js?v=20260929-countfix2';
+import { customerSearchFields, ensureCustomerIndex, initGlobalSearch, runDailyMaintenance, smartCustomerSubscription, reconcileDashboardStats } from './vip-optimizations.js?v=20260929-countfix3';
 const ADMIN_HASH='78fd5f1e5a3f6eef05ab8d692942fd0ff4a8f4cc0e6087026626006a7fae452d';
 let reps=[],fields=[],customers=[],progressStages=[],editingCustomerId=null,draggedFieldId=null,dragSaving=false,draggedProgressId=null,progressDragSaving=false,editingFieldTypeId=null;
 let currentView='all',currentRepFilter='';
