@@ -128,13 +128,14 @@
       <section id="view-backup" class="admin-view" hidden>
         <div class="card">
           <div class="section-title"><div class="dot"></div><h2>业务数据备份 / 恢复</h2><div class="spacer"></div><span class="pill">只备份客户与业务数据</span></div>
-          <div class="backup-intro">业务数据备份只包含：全部业务员、登记字段设置、客户进度设置、全部客户资料、业务员归属、客户已完成进度、归档/星标状态、操作日志、话术管理中的全部话术，以及每个客户的话术进度。不备份 GitHub 仓库、网页代码、工具、模板或系统功能。恢复前会自动导出一份当前业务数据安全备份。</div>
+          <div class="backup-intro">备份从云端完整读取业务员、字段、进度、客户、归档、日志、话术及客户话术进度，并保存话术附件原文件、隔离记录和统计原始记录。数据表或附件读取失败时停止导出。校验通过的备份同时保存在本机恢复保险库。网页代码、GitHub 仓库、工具和模板不在业务恢复范围内。</div>
           <div class="backup-actions">
             <button id="exportBackup" class="btn primary">导出业务数据备份</button>
-            <button id="importBackup" class="btn soft">导入业务数据备份并恢复</button>
-            <input id="backupFile" type="file" accept=".json,application/json" hidden>
+            <button id="importBackup" class="btn soft">从备份安全补回数据</button>
+            <button id="recoverSafetyBackup" class="btn soft">下载恢复前安全备份</button>
+            <input id="backupFile" type="file" accept=".json,.zip,application/json,application/zip" hidden>
           </div>
-          <div class="notice warn" style="margin-top:16px">恢复只会替换客户与业务相关数据，不会修改 GitHub 仓库、页面代码、工具或模板。恢复期间系统会暂停实时刷新，完成后自动重新载入客户、业务员、进度、日志和话术数据。</div>
+          <div class="notice warn" style="margin-top:16px">安全恢复只补回缺失记录，保留当前已有资料和修改。恢复前展示新增、冲突和关联问题，并保存当前真实数据；中断后可重新选择同一备份继续核对。冲突不会被自动覆盖，详情会写入恢复报告。支持业务 JSON、旧版完整 JSON 和 V5 ZIP 的业务数据，不会用旧代码覆盖当前系统。</div>
           <div id="backupNote" class="notice" hidden></div>
         </div>
       </section>
@@ -209,4 +210,4 @@
   </div>
 </div>
 
-<script type="module" src="./admin-app.js?v=20260929-stable-load1"></script><script src="./vip-tool-catalog.js?v=20260929-catalog-2"></script><script src="./vip-workflow.js?v=20260929-standalone-sync-6"></script></body></html>
+<script type="module" src="./admin-app.js?v=20260929-safe-backup1"></script><script src="./vip-tool-catalog.js?v=20260929-catalog-2"></script><script src="./vip-workflow.js?v=20260929-standalone-sync-6"></script></body></html>

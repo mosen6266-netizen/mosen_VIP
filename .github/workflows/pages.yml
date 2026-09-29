@@ -32,7 +32,9 @@ jobs:
           node --check admin-app.js
           node --check sales-app.js
           node --check vip-optimizations.js
-          node --test tests/customer-loading.test.mjs
+          node --check backup-safe.js
+          node --check backup-ui.js
+          node --test tests/*.test.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:

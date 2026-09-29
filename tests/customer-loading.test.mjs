@@ -99,7 +99,7 @@ function appHarness(role,{realRender=false}={}){
  const metadata={list:async()=>[],filter:async()=>[{id:'rep',username:'rep-a'}],subscribe:()=>()=>{}};
  const base44={entities:new Proxy({VIPCustomer:entity},{get:(o,k)=>o[k]||metadata})};
  const context=vm.createContext({console,document,base44,localStorage:local,sessionStorage:session,location:{href:''},window:{addEventListener(){}},setTimeout,clearTimeout,TextEncoder,structuredClone,Date,
-  ...loader,selectCustomerPage:loader.customerPage,
+  createBackupController:()=>({}),...loader,selectCustomerPage:loader.customerPage,
   createCustomerStore:(e,opts)=>loader.createCustomerStore(e,{...opts,retryOptions:fast}),
   retryRead:fn=>loader.retryRead(fn,fast),esc:s=>String(s??''),formatDate:s=>s||'',localDateKey:s=>String(s||'2026-09-29').slice(0,10),initGlobalSearch(){},buildGroupedFieldControls:()=>'',initDateTimeControls(){},uiConfirm:async()=>true,
   customerNotice:(_,message)=>{context.lastNotice=message},lastNotice:'',renders:[]});
