@@ -33,6 +33,19 @@ jobs:
           cp -a source/. vip/toolbox/
           rm -rf vip/toolbox/.git vip/toolbox/.github
 
+      - name: Rewire copied tools to VIP-local paths
+        run: |
+          grep -RIl --exclude-dir='.git' 'https://mosen6266-netizen.github.io/mosen6266/' vip/toolbox | while read -r file; do
+            sed -i 's#https://mosen6266-netizen.github.io/mosen6266/#https://mosen6266-netizen.github.io/mosen_VIP/toolbox/#g' "$file"
+          done
+          for file in "vip/toolbox/tools/聊天流程编辑器.html" "vip/toolbox/聊天流程编辑器.html"; do
+            if [ -f "$file" ]; then
+              sed -i "s/REPO='mosen6266'/REPO='mosen_VIP'/g" "$file"
+              sed -i "s#PUBLIC_DATA_PATH='data/chat-flows.json'#PUBLIC_DATA_PATH='toolbox/data/chat-flows.json'#g" "$file"
+              sed -i "s#TOOL_PUBLIC_BASE='https://mosen6266-netizen.github.io/mosen6266/'#TOOL_PUBLIC_BASE='https://mosen6266-netizen.github.io/mosen_VIP/toolbox/'#g" "$file"
+            fi
+          done
+
       - name: Save toolbox snapshot
         working-directory: vip
         run: |
