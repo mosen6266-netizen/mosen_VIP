@@ -1,0 +1,43 @@
+name: Import Toolbox Snapshot
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/import-toolbox.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout VIP repository
+        uses: actions/checkout@v4
+        with:
+          path: vip
+          fetch-depth: 0
+
+      - name: Checkout toolbox source repository
+        uses: actions/checkout@v4
+        with:
+          repository: mosen6266-netizen/mosen6266
+          path: source
+          fetch-depth: 1
+
+      - name: Copy source files into VIP toolbox folder
+        run: |
+          rm -rf vip/toolbox
+          mkdir -p vip/toolbox
+          cp -a source/. vip/toolbox/
+          rm -rf vip/toolbox/.git vip/toolbox/.github
+
+      - name: Save toolbox snapshot
+        working-directory: vip
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add toolbox
+          git commit -m "Import standalone toolbox snapshot" || exit 0
+          git push
