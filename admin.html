@@ -261,23 +261,23 @@ async function enter(){
   await Promise.all([loadReps(),loadFields(),loadProgress(),loadLogs(),refreshCustomerCounts()]);
   showAdminView('all');
   try{
-    base44.entities.SalesRep.subscribe(()=>loadReps());
-    base44.entities.FormField.subscribe(()=>{if(!dragSaving){loadFields();loadCustomers()}});
-    base44.entities.ProgressStage.subscribe(()=>{if(!progressDragSaving){loadProgress();loadCustomers()}});
-    base44.entities.Customer.subscribe(()=>{loadCustomers();scheduleCustomerCountRefresh()});
-    base44.entities.ActivityLog.subscribe(()=>loadLogs());
+    base44.entities.VIPSalesRep.subscribe(()=>loadReps());
+    base44.entities.VIPFormField.subscribe(()=>{if(!dragSaving){loadFields();loadCustomers()}});
+    base44.entities.VIPProgressStage.subscribe(()=>{if(!progressDragSaving){loadProgress();loadCustomers()}});
+    base44.entities.VIPCustomer.subscribe(()=>{loadCustomers();scheduleCustomerCountRefresh()});
+    base44.entities.VIPActivityLog.subscribe(()=>loadLogs());
   }catch(_){}
 }
 document.getElementById('adminLogin').onclick=async()=>{
   const p=document.getElementById('adminPassword').value;
   if(!p){showMessage(loginNote,'请输入管理员密码。','err');return}
   if(await sha256(p)!==ADMIN_HASH){showMessage(loginNote,'管理员密码错误。','err');return}
-  localStorage.setItem('m717_admin','1');await enter()
+  localStorage.setItem('mVIP_admin','1');await enter()
 };
 
 async function loadReps(){
   try{
-    reps=unwrap(await base44.entities.SalesRep.list({sort:'-created_date',limit:500}));
+    reps=unwrap(await base44.entities.VIPSalesRep.list({sort:'-created_date',limit:500}));
     document.getElementById('salesCount').textContent=reps.length;
     const rf=document.getElementById('adminRepFilter');if(rf)rf.innerHTML='<option value="">全部业务员</option>'+reps.map(r=>'<option value="'+esc(r.username)+'">'+esc(r.display_name||r.username)+'</option>').join('');
     renderReps();renderSidebar();
@@ -299,22 +299,22 @@ function renderReps(){
     const count=customerCountByRep[String(r.username||'')]||0;
     return '<tr><td><b>'+esc(r.username||'')+'</b></td><td>'+esc(r.display_name||'')+'</td><td>'+count+'</td><td>'+esc(formatDate(r.created_date))+'</td><td><button class="btn danger delrep" data-id="'+r.id+'">删除</button></td></tr>';
   }).join('')+'</tbody></table></div>';
-  box.querySelectorAll('.delrep').forEach(b=>b.onclick=async()=>{if(!await uiConfirm('删除后这个业务员将无法继续登录。',{title:'删除业务员',confirmText:'确认删除',danger:true}))return;await base44.entities.SalesRep.delete(b.dataset.id);await loadReps()})
+  box.querySelectorAll('.delrep').forEach(b=>b.onclick=async()=>{if(!await uiConfirm('删除后这个业务员将无法继续登录。',{title:'删除业务员',confirmText:'确认删除',danger:true}))return;await base44.entities.VIPSalesRep.delete(b.dataset.id);await loadReps()})
 }
 document.getElementById('createRep').onclick=async()=>{
   const username=document.getElementById('repUsername').value.trim(),display_name=document.getElementById('repDisplayName').value.trim(),note=document.getElementById('repNote');
   if(!username){showMessage(note,'请输入业务员用户名。','err');return}
   try{
-    const current=unwrap(await base44.entities.SalesRep.list({sort:'-created_date',limit:500}));
+    const current=unwrap(await base44.entities.VIPSalesRep.list({sort:'-created_date',limit:500}));
     if(current.some(r=>String(r.username||'').toLowerCase()===username.toLowerCase())){showMessage(note,'这个用户名已经存在。','err');return}
-    await base44.entities.SalesRep.create({username,display_name});showMessage(note,'业务员用户名已创建：'+username,'ok');
+    await base44.entities.VIPSalesRep.create({username,display_name});showMessage(note,'业务员用户名已创建：'+username,'ok');
     document.getElementById('repUsername').value='';document.getElementById('repDisplayName').value='';await loadReps()
   }catch(err){showMessage(note,'创建失败：'+(err?.message||String(err)),'err')}
 };
 
 async function loadFields(){
   try{
-    fields=unwrap(await base44.entities.FormField.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
+    fields=unwrap(await base44.entities.VIPFormField.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
     const activeCount=fields.filter(f=>f.active!==false).length;
     document.getElementById('activeFields').textContent=activeCount;document.getElementById('sidebarFieldCount').textContent=activeCount;
     renderFields();
@@ -358,8 +358,8 @@ function renderFields(){
   box.innerHTML='<div class="field-sort-list">'+fields.map((f,i)=>'<div class="field-sort-row" draggable="true" data-id="'+f.id+'"><label class="field-select-wrap" title="选择字段"><input class="field-select-checkbox" type="checkbox" value="'+f.id+'"><span></span></label><div class="drag-handle">☰</div><div class="field-sort-name"><b>'+esc(f.label)+'</b><span>'+esc(fieldTypeLabel(f.field_type))+(f.required?' · 必填':'')+(f.group_name?' · <em class="field-group-badge">分栏：'+esc(f.group_name)+'</em>':'')+'</span></div><div class="field-sort-order">第 '+(i+1)+' 项</div><div class="row"><button class="btn soft change-type" data-id="'+f.id+'">编辑字段</button><button class="btn soft toggle" data-id="'+f.id+'" data-active="'+(f.active!==false)+'">'+(f.active===false?'启用':'停用')+'</button><button class="btn danger remove" data-id="'+f.id+'">删除</button></div></div>').join('')+'</div>';
   box.querySelectorAll('.field-select-checkbox').forEach(cb=>{cb.onclick=e=>e.stopPropagation();cb.onchange=updateFieldSelectionCount});
   box.querySelectorAll('.change-type').forEach(b=>b.onclick=e=>{e.stopPropagation();openFieldTypeModal(b.dataset.id)});
-  box.querySelectorAll('.toggle').forEach(b=>b.onclick=async e=>{e.stopPropagation();await base44.entities.FormField.update(b.dataset.id,{active:b.dataset.active!=='true'});await loadFields()});
-  box.querySelectorAll('.remove').forEach(b=>b.onclick=async e=>{e.stopPropagation();if(!await uiConfirm('删除后该登记字段将不再显示，请确认是否继续。',{title:'删除登记字段',confirmText:'确认删除',danger:true}))return;await base44.entities.FormField.delete(b.dataset.id);await loadFields()});
+  box.querySelectorAll('.toggle').forEach(b=>b.onclick=async e=>{e.stopPropagation();await base44.entities.VIPFormField.update(b.dataset.id,{active:b.dataset.active!=='true'});await loadFields()});
+  box.querySelectorAll('.remove').forEach(b=>b.onclick=async e=>{e.stopPropagation();if(!await uiConfirm('删除后该登记字段将不再显示，请确认是否继续。',{title:'删除登记字段',confirmText:'确认删除',danger:true}))return;await base44.entities.VIPFormField.delete(b.dataset.id);await loadFields()});
   box.querySelectorAll('.field-sort-row').forEach(row=>{
     row.ondragstart=e=>{if(e.target.closest('.field-select-wrap')){e.preventDefault();return}draggedFieldId=row.dataset.id;row.classList.add('dragging');e.dataTransfer.effectAllowed='move'};
     row.ondragend=()=>{row.classList.remove('dragging');draggedFieldId=null};
@@ -394,7 +394,7 @@ document.getElementById('saveFieldType').onclick=async()=>{
   if(!label){showMessage(note,'字段名称不能为空。','err');return}
   if(type==='select'&&!options){showMessage(note,'下拉选项不能为空。','err');return}
   try{
-    await base44.entities.FormField.update(editingFieldTypeId,{label,field_type:type,options:type==='select'?options:''});
+    await base44.entities.VIPFormField.update(editingFieldTypeId,{label,field_type:type,options:type==='select'?options:''});
     showMessage(note,'字段名称和类型已更新。','ok');
     await loadFields();
     setTimeout(closeFieldTypeModal,250);
@@ -421,7 +421,7 @@ document.getElementById('saveFieldGroup').onclick=async()=>{
   if(!ids.length){showMessage(note,'没有选择字段。','err');return}
   if(!name){showMessage(note,'请输入分栏名称。','err');return}
   try{
-    for(const id of ids){await retryRateLimited(()=>base44.entities.FormField.update(id,{group_name:name}));await waitMs(90)}
+    for(const id of ids){await retryRateLimited(()=>base44.entities.VIPFormField.update(id,{group_name:name}));await waitMs(90)}
     showMessage(note,'分栏已保存。','ok');await loadFields();setTimeout(closeFieldGroupModal,250);
   }catch(err){showMessage(note,'保存分栏失败：'+(err?.message||String(err)),'err')}
 };
@@ -429,7 +429,7 @@ document.getElementById('removeFieldGroup').onclick=async()=>{
   const ids=selectedFieldIds(),note=document.getElementById('fieldNote');
   if(!ids.length){showMessage(note,'请先勾选要移出分栏的字段。','err');return}
   try{
-    for(const id of ids){await retryRateLimited(()=>base44.entities.FormField.update(id,{group_name:''}));await waitMs(90)}
+    for(const id of ids){await retryRateLimited(()=>base44.entities.VIPFormField.update(id,{group_name:''}));await waitMs(90)}
     showMessage(note,'所选字段已移出分栏。','ok');await loadFields();
   }catch(err){showMessage(note,'移出分栏失败：'+(err?.message||String(err)),'err')}
 };
@@ -437,7 +437,7 @@ document.getElementById('removeFieldGroup').onclick=async()=>{
 async function saveFieldOrder(movedId,newOrder){
   const note=document.getElementById('fieldNote');dragSaving=true;
   try{
-    await retryRateLimited(()=>base44.entities.FormField.update(movedId,{order:newOrder}));
+    await retryRateLimited(()=>base44.entities.VIPFormField.update(movedId,{order:newOrder}));
     showMessage(note,'排序已保存。','ok');
   }catch(err){
     showMessage(note,'保存排序失败：'+(err?.message||String(err)),'err');
@@ -450,14 +450,14 @@ document.getElementById('addField').onclick=async()=>{
   if(!label){showMessage(note,'请输入字段名称。','err');return}
   try{
     const nextOrder=fields.length?Math.max(...fields.map(f=>Number(f.order)||0))+1:1;
-    await base44.entities.FormField.create({label,field_key:'f_'+Date.now(),field_type:type,options,required,order:nextOrder,active:true});
+    await base44.entities.VIPFormField.create({label,field_key:'f_'+Date.now(),field_type:type,options,required,order:nextOrder,active:true});
     showMessage(note,'字段已添加。','ok');document.getElementById('fieldLabel').value='';document.getElementById('fieldOptions').value='';await loadFields()
   }catch(err){showMessage(note,'添加失败：'+(err?.message||'未知错误'),'err')}
 };
 
 async function loadProgress(){
   try{
-    progressStages=unwrap(await base44.entities.ProgressStage.list({sort:'order',limit:500})).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
+    progressStages=unwrap(await base44.entities.VIPProgressStage.list({sort:'order',limit:500})).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
     document.getElementById('sidebarProgressCount').textContent=progressStages.length;const pf=document.getElementById('adminProgressFilter');if(pf)pf.innerHTML='<option value="">全部进度</option>'+progressStages.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join('');renderProgress();
   }catch(err){document.getElementById('progressList').innerHTML='<div class="notice err">读取客户进度失败：'+esc(err?.message||String(err))+'</div>'}
 }
@@ -465,8 +465,8 @@ function renderProgress(){
   const box=document.getElementById('progressList');
   if(!progressStages.length){box.innerHTML='<div class="empty">还没有客户进度，先添加一个。</div>';return}
   box.innerHTML='<div class="field-sort-list">'+progressStages.map((p,i)=>'<div class="field-sort-row progress-sort-row" draggable="true" data-id="'+p.id+'"><div class="drag-handle">☰</div><div class="field-sort-name"><input class="progress-name-input" data-id="'+p.id+'" value="'+esc(p.label)+'"><span>第 '+(i+1)+' 步</span></div><div class="field-sort-order">'+(i+1)+'</div><div class="row"><button class="btn soft save-progress" data-id="'+p.id+'">保存名称</button><button class="btn danger delete-progress" data-id="'+p.id+'">删除</button></div></div>').join('')+'</div>';
-  box.querySelectorAll('.save-progress').forEach(b=>b.onclick=async()=>{const input=box.querySelector('.progress-name-input[data-id="'+b.dataset.id+'"]');const label=input.value.trim();if(!label)return;await base44.entities.ProgressStage.update(b.dataset.id,{label});await loadProgress()});
-  box.querySelectorAll('.delete-progress').forEach(b=>b.onclick=async()=>{if(!await uiConfirm('已有客户的历史勾选不会再显示这个步骤。',{title:'删除客户进度',confirmText:'确认删除',danger:true}))return;await base44.entities.ProgressStage.delete(b.dataset.id);await loadProgress()});
+  box.querySelectorAll('.save-progress').forEach(b=>b.onclick=async()=>{const input=box.querySelector('.progress-name-input[data-id="'+b.dataset.id+'"]');const label=input.value.trim();if(!label)return;await base44.entities.VIPProgressStage.update(b.dataset.id,{label});await loadProgress()});
+  box.querySelectorAll('.delete-progress').forEach(b=>b.onclick=async()=>{if(!await uiConfirm('已有客户的历史勾选不会再显示这个步骤。',{title:'删除客户进度',confirmText:'确认删除',danger:true}))return;await base44.entities.VIPProgressStage.delete(b.dataset.id);await loadProgress()});
   box.querySelectorAll('.progress-sort-row').forEach(row=>{
     row.ondragstart=e=>{draggedProgressId=row.dataset.id;row.classList.add('dragging');e.dataTransfer.effectAllowed='move'};
     row.ondragend=()=>{row.classList.remove('dragging');draggedProgressId=null};
@@ -477,7 +477,7 @@ function renderProgress(){
 async function saveProgressOrder(movedId,newOrder){
   const note=document.getElementById('progressNote');progressDragSaving=true;
   try{
-    await retryRateLimited(()=>base44.entities.ProgressStage.update(movedId,{order:newOrder}));
+    await retryRateLimited(()=>base44.entities.VIPProgressStage.update(movedId,{order:newOrder}));
     showMessage(note,'进度顺序已保存。','ok');
   }catch(err){
     showMessage(note,'进度排序保存失败：'+(err?.message||String(err)),'err');
@@ -487,7 +487,7 @@ async function saveProgressOrder(movedId,newOrder){
 }
 document.getElementById('addProgress').onclick=async()=>{
   const label=document.getElementById('progressLabel').value.trim(),note=document.getElementById('progressNote');if(!label){showMessage(note,'请输入进度名称。','err');return}
-  try{const nextOrder=progressStages.length?Math.max(...progressStages.map(p=>Number(p.order)||0))+1:1;await base44.entities.ProgressStage.create({label,order:nextOrder,active:true});document.getElementById('progressLabel').value='';showMessage(note,'进度已添加。','ok');await loadProgress()}
+  try{const nextOrder=progressStages.length?Math.max(...progressStages.map(p=>Number(p.order)||0))+1:1;await base44.entities.VIPProgressStage.create({label,order:nextOrder,active:true});document.getElementById('progressLabel').value='';showMessage(note,'进度已添加。','ok');await loadProgress()}
   catch(err){showMessage(note,'添加失败：'+(err?.message||String(err)),'err')}
 };
 
@@ -545,7 +545,7 @@ function attachAdminPreviewEditor(portal,row){
     const rep_username=portal.querySelector('[data-preview-rep]')?.value||'';
     showMessage(note,'正在保存…');
     try{
-      await base44.entities.Customer.update(row.id,{rep_username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
+      await base44.entities.VIPCustomer.update(row.id,{rep_username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
       row.rep_username=rep_username;row.data=data;row.completed_progress_ids=completed_progress_ids;
       showMessage(note,'已保存并同步。','ok');
       await loadCustomers();
@@ -604,7 +604,7 @@ let activityLogs=[];
 async function loadLogs(){
   const box=document.getElementById('logList');if(!box)return;
   try{
-    activityLogs=unwrap(await base44.entities.ActivityLog.list({sort:'-created_date',limit:1000}));
+    activityLogs=unwrap(await base44.entities.VIPActivityLog.list({sort:'-created_date',limit:1000}));
     const date=document.getElementById('logDate')?.value||new Date().toISOString().slice(0,10);
     const q=(document.getElementById('logSearch')?.value||'').trim().toLowerCase();
     const todayRows=activityLogs.filter(x=>localLogDate(x.event_time||x.created_date)===date);
@@ -736,14 +736,14 @@ async function validateBackupChecksum(raw){
   }
 }
 async function restoreEntities(entities){
-  for(const row of entities.SalesRep||[])await base44.entities.SalesRep.create(withoutOldId(row));
-  for(const row of entities.FormField||[])await base44.entities.FormField.create(withoutOldId(row));
+  for(const row of entities.SalesRep||[])await base44.entities.VIPSalesRep.create(withoutOldId(row));
+  for(const row of entities.FormField||[])await base44.entities.VIPFormField.create(withoutOldId(row));
 
   const progressRows=entities.ProgressStage||[];
-  for(const row of progressRows)await base44.entities.ProgressStage.create(withoutOldId(row));
+  for(const row of progressRows)await base44.entities.VIPProgressStage.create(withoutOldId(row));
 
   // Do not rely only on create() return shape. Re-read all restored progress rows and map by sorted backup order.
-  const restoredProgress=unwrap(await base44.entities.ProgressStage.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
+  const restoredProgress=unwrap(await base44.entities.VIPProgressStage.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
   const sortedBackupProgress=[...progressRows].sort((a,b)=>(a.order||0)-(b.order||0));
   const progressMap={};
   for(let i=0;i<sortedBackupProgress.length;i++){
@@ -757,7 +757,7 @@ async function restoreEntities(entities){
     const old=row.__old_id,clean=withoutOldId(row);
     clean.data=(clean.data&&typeof clean.data==='object')?clean.data:{};
     clean.completed_progress_ids=(clean.completed_progress_ids||[]).map(id=>progressMap[String(id)]||'').filter(Boolean);
-    const created=await base44.entities.Customer.create(clean);
+    const created=await base44.entities.VIPCustomer.create(clean);
     const cid=createdId(created);
     if(old&&cid)customerMap[String(old)]=String(cid);
   }
@@ -766,7 +766,7 @@ async function restoreEntities(entities){
     const clean=withoutOldId(row);
     if(clean.customer_id&&customerMap[String(clean.customer_id)])clean.customer_id=customerMap[String(clean.customer_id)];
     if(clean.action_type?.startsWith('progress_')&&clean.target_key&&progressMap[String(clean.target_key)])clean.target_key=progressMap[String(clean.target_key)];
-    await base44.entities.ActivityLog.create(clean);
+    await base44.entities.VIPActivityLog.create(clean);
   }
 }
 async function importFullBackup(file){
@@ -805,7 +805,7 @@ async function importFullBackup(file){
 
 async function fetchAllAdminCustomers(query){
   const all=[];let skip=0;
-  while(true){const batch=unwrap(await base44.entities.Customer.filter(query,'-admin_sort_score',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500;if(skip>10000)break}
+  while(true){const batch=unwrap(await base44.entities.VIPCustomer.filter(query,'-admin_sort_score',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500;if(skip>10000)break}
   return all;
 }
 function adminBaseQuery(){
@@ -838,14 +838,14 @@ async function fetchCustomerPage(){
     customers=globalCustomerRows.slice(start,start+CUSTOMER_PAGE_SIZE);customerHasNext=start+CUSTOMER_PAGE_SIZE<globalCustomerRows.length;
   }else{
     globalCustomerRows=null;const skip=(customerPage-1)*CUSTOMER_PAGE_SIZE;
-    const rows=unwrap(await base44.entities.Customer.filter(adminBaseQuery(),'-admin_sort_score',CUSTOMER_PAGE_SIZE+1,skip));
+    const rows=unwrap(await base44.entities.VIPCustomer.filter(adminBaseQuery(),'-admin_sort_score',CUSTOMER_PAGE_SIZE+1,skip));
     customerHasNext=rows.length>CUSTOMER_PAGE_SIZE;customers=rows.slice(0,CUSTOMER_PAGE_SIZE);
   }
   if(!customers.length&&customerPage>1){customerPage--;return fetchCustomerPage()}
 }
 async function refreshCustomerCounts(){
   const all=[];let skip=0;
-  while(true){const batch=unwrap(await base44.entities.Customer.list('-created_date',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500}
+  while(true){const batch=unwrap(await base44.entities.VIPCustomer.list('-created_date',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500}
   let active=0,archived=0,counts={},archiveCounts={};
   for(const row of all){const key=String(row.rep_username||'');if(row.archived===true){archived++;archiveCounts[key]=(archiveCounts[key]||0)+1}else{active++;counts[key]=(counts[key]||0)+1}}
   totalCustomerCount=active;totalArchivedCount=archived;customerCountByRep=counts;archivedCountByRep=archiveCounts;
@@ -879,7 +879,7 @@ function repDisplayName(username){
   return rep?.display_name||rep?.username||username||'未指定业务员';
 }
 async function writeAdminLog(payload){
-  try{await base44.entities.ActivityLog.create({actor_username:'admin',actor_display_name:'管理员',actor_type:'admin',action_type:payload.action_type||'update',customer_id:payload.customer_id||'',customer_name:payload.customer_name||'',target_key:payload.target_key||'',target_label:payload.target_label||'',old_value:payload.old_value==null?'':String(payload.old_value),new_value:payload.new_value==null?'':String(payload.new_value),message:payload.message||'',event_time:new Date().toISOString(),metadata:payload.metadata||{}})}catch(_){}
+  try{await base44.entities.VIPActivityLog.create({actor_username:'admin',actor_display_name:'管理员',actor_type:'admin',action_type:payload.action_type||'update',customer_id:payload.customer_id||'',customer_name:payload.customer_name||'',target_key:payload.target_key||'',target_label:payload.target_label||'',old_value:payload.old_value==null?'':String(payload.old_value),new_value:payload.new_value==null?'':String(payload.new_value),message:payload.message||'',event_time:new Date().toISOString(),metadata:payload.metadata||{}})}catch(_){}
 }
 function adminCustomerCopyText(row){
   const lines=['客户姓名：'+(fixedCustomerValue(row,'f_customer_name')||''),'业务员：'+repDisplayName(row.rep_username)];
@@ -887,16 +887,16 @@ function adminCustomerCopyText(row){
   const p=progressLabels(row);lines.push('目前进度：'+p.current);if(row.archived)lines.push('归档原因：'+(row.archive_reason||'未填写'));return lines.join('\n');
 }
 async function copyAdminCustomer(row){try{await navigator.clipboard.writeText(adminCustomerCopyText(row));await uiAlert('客户资料已复制到剪贴板。',{title:'复制成功'})}catch(_){await uiAlert('复制失败，请重试。',{title:'复制失败',danger:true})}}
-async function setAdminStar(row,value){await base44.entities.Customer.update(row.id,{starred:value});row.starred=value;await writeAdminLog({action_type:'customer_star',customer_id:row.id,customer_name:fixedCustomerValue(row,'f_customer_name')||'未命名客户',message:'管理员'+(value?' 将客户设为重点「':' 取消重点客户「')+(fixedCustomerValue(row,'f_customer_name')||'未命名客户')+'」'});renderCustomers()}
+async function setAdminStar(row,value){await base44.entities.VIPCustomer.update(row.id,{starred:value});row.starred=value;await writeAdminLog({action_type:'customer_star',customer_id:row.id,customer_name:fixedCustomerValue(row,'f_customer_name')||'未命名客户',message:'管理员'+(value?' 将客户设为重点「':' 取消重点客户「')+(fixedCustomerValue(row,'f_customer_name')||'未命名客户')+'」'});renderCustomers()}
 async function archiveAdminCustomer(row){
   const reason=await uiPrompt('可填写归档原因，例如：已完成 / 客户失联 / 暂停跟进 / 重复客户 / 其他。',{title:'归档客户',placeholder:'归档原因（可选）',confirmText:'下一步'});if(reason===null)return;
   const name=fixedCustomerValue(row,'f_customer_name')||'未命名客户';if(!await uiConfirm('确定将「'+name+'」移入归档吗？\n客户资料不会删除，可以随时恢复。',{title:'确认归档',confirmText:'确认归档'}))return;
-  await base44.entities.Customer.update(row.id,{archived:true,archived_at:new Date().toISOString(),archived_by_username:'admin',archived_by_display_name:'管理员',archived_by_type:'admin',archive_reason:reason});
+  await base44.entities.VIPCustomer.update(row.id,{archived:true,archived_at:new Date().toISOString(),archived_by_username:'admin',archived_by_display_name:'管理员',archived_by_type:'admin',archive_reason:reason});
   await writeAdminLog({action_type:'customer_archive',customer_id:row.id,customer_name:name,message:'管理员将客户「'+name+'」归档'+(reason?'，原因：'+reason:'')});await loadCustomers({refreshCounts:true});
 }
 async function restoreAdminCustomer(row){
   const name=fixedCustomerValue(row,'f_customer_name')||'未命名客户';if(!await uiConfirm('将「'+name+'」恢复到正常客户列表吗？',{title:'恢复客户',confirmText:'确认恢复'}))return;
-  await base44.entities.Customer.update(row.id,{archived:false,archived_at:'',archived_by_username:'',archived_by_display_name:'',archived_by_type:'',archive_reason:''});
+  await base44.entities.VIPCustomer.update(row.id,{archived:false,archived_at:'',archived_by_username:'',archived_by_display_name:'',archived_by_type:'',archive_reason:''});
   await writeAdminLog({action_type:'customer_restore',customer_id:row.id,customer_name:name,message:'管理员将客户「'+name+'」从归档恢复'});await loadCustomers({refreshCounts:true});
 }
 function renderCustomers(){
@@ -912,14 +912,14 @@ function renderCustomers(){
   box.querySelectorAll('.archivecustomer').forEach(b=>b.onclick=()=>archiveAdminCustomer(customers.find(x=>x.id===b.dataset.id)));
   box.querySelectorAll('.restorecustomer').forEach(b=>b.onclick=()=>restoreAdminCustomer(customers.find(x=>x.id===b.dataset.id)));
   box.querySelectorAll('.star-btn').forEach(b=>b.onclick=()=>{const row=customers.find(x=>x.id===b.dataset.id);if(row)setAdminStar(row,!row.starred)});
-  box.querySelectorAll('.delcustomer').forEach(b=>b.onclick=async()=>{const row=customers.find(x=>x.id===b.dataset.id);if(!row||!await uiConfirm('永久删除后无法恢复，请确认是否继续。',{title:'永久删除客户',confirmText:'永久删除',danger:true}))return;await writeAdminLog({action_type:'customer_delete',customer_id:row.id,customer_name:fixedCustomerValue(row,'f_customer_name')||'未命名客户',message:'管理员永久删除了归档客户「'+(fixedCustomerValue(row,'f_customer_name')||'未命名客户')+'」'});await base44.entities.Customer.delete(row.id);await loadCustomers({refreshCounts:true})})
+  box.querySelectorAll('.delcustomer').forEach(b=>b.onclick=async()=>{const row=customers.find(x=>x.id===b.dataset.id);if(!row||!await uiConfirm('永久删除后无法恢复，请确认是否继续。',{title:'永久删除客户',confirmText:'永久删除',danger:true}))return;await writeAdminLog({action_type:'customer_delete',customer_id:row.id,customer_name:fixedCustomerValue(row,'f_customer_name')||'未命名客户',message:'管理员永久删除了归档客户「'+(fixedCustomerValue(row,'f_customer_name')||'未命名客户')+'」'});await base44.entities.VIPCustomer.delete(row.id);await loadCustomers({refreshCounts:true})})
 }
 function adminCurrentEditorState(){
   const data={};customerEditForm.querySelectorAll('[data-key]').forEach(el=>data[el.dataset.key]=el.value);
   const completed_progress_ids=[...document.querySelectorAll('#adminProgressChecklist input[type="checkbox"]:checked')].map(x=>x.dataset.progressId).sort();
   return JSON.stringify({data,completed_progress_ids,rep_username:document.getElementById('editRep').value});
 }
-function adminDraftKey(){return 'm717_draft_admin_'+(editingCustomerId||'none')}
+function adminDraftKey(){return 'mVIP_draft_admin_'+(editingCustomerId||'none')}
 function saveAdminDraft(){if(customerModal.hidden)return;clearTimeout(adminDraftTimer);adminDraftTimer=setTimeout(()=>{try{localStorage.setItem(adminDraftKey(),adminCurrentEditorState())}catch(_){}},250)}
 function clearAdminDraft(){try{localStorage.removeItem(adminDraftKey())}catch(_){}}
 function adminEditorDirty(){return !customerModal.hidden&&adminCurrentEditorState()!==adminEditorBaseline}
@@ -947,7 +947,7 @@ customerEditForm.onsubmit=async e=>{
   const data={...(row.data||{})};customerEditForm.querySelectorAll('[data-key]').forEach(el=>data[el.dataset.key]=el.value);
   try{
     const completed_progress_ids=[...document.querySelectorAll('#adminProgressChecklist input[type="checkbox"]:checked')].map(x=>x.dataset.progressId);
-    await base44.entities.Customer.update(row.id,{rep_username:document.getElementById('editRep').value,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
+    await base44.entities.VIPCustomer.update(row.id,{rep_username:document.getElementById('editRep').value,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
     clearAdminDraft();adminEditorBaseline=adminCurrentEditorState();showMessage(customerEditNote,'客户资料已更新。','ok');await loadCustomers();
     setTimeout(()=>{customerModal.hidden=true;adminCustomerFormSaving=false;if(submitBtn){submitBtn.disabled=false;submitBtn.textContent=oldText;submitBtn.removeAttribute('aria-busy')}},350);
   }catch(err){
@@ -978,6 +978,6 @@ document.getElementById('refreshLogs').onclick=loadLogs;
 document.getElementById('exportBackup').onclick=exportFullBackup;
 document.getElementById('importBackup').onclick=()=>document.getElementById('backupFile').click();
 document.getElementById('backupFile').onchange=async e=>{const file=e.target.files?.[0];if(file)await importFullBackup(file);e.target.value=''};
-document.getElementById('logoutBtn').onclick=()=>{localStorage.removeItem('m717_admin');location.reload()};
-if(localStorage.getItem('m717_admin')==='1')enter();
+document.getElementById('logoutBtn').onclick=()=>{localStorage.removeItem('mVIP_admin');location.reload()};
+if(localStorage.getItem('mVIP_admin')==='1')enter();
 </script><script src="./vip-workflow.js?v=20260929-1"></script></body></html>
