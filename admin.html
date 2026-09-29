@@ -26,6 +26,7 @@
         <button class="sidebar-item" data-view="workflows"><span class="sidebar-icon">✎</span><span class="sidebar-text">话术管理</span></button>
         <button class="sidebar-item" data-view="logs"><span class="sidebar-icon">◷</span><span class="sidebar-text">日志</span><span id="sidebarLogCount" class="sidebar-count">0</span></button>
         <button class="sidebar-item" data-view="backup"><span class="sidebar-icon">⇅</span><span class="sidebar-text">备份恢复</span></button>
+        <a class="sidebar-item" href="./toolbox/index.html" target="_blank" rel="noopener" style="text-decoration:none"><span class="sidebar-icon">↗</span><span class="sidebar-text">工具中心</span></a>
       </div>
     </aside>
 
@@ -131,9 +132,6 @@
             <button id="exportBackup" class="btn primary">导出完整系统备份</button>
             <button id="importBackup" class="btn soft">导入完整备份并恢复</button>
             <input id="backupFile" type="file" accept=".json,application/json" hidden>
-          </div>
-          <div style="margin-top:14px;padding-top:14px;border-top:1px solid #eef1f5">
-            <button id="openVipToolCenterBackup" class="btn soft" type="button" style="min-width:180px">打开 VIP 工具中心 ↗</button>
           </div>
           <div class="notice warn" style="margin-top:16px">完整恢复会重建当前云端数据，并把 VIP 工具中心恢复到备份当时的文件、模板、分类和排序。请只导入本系统导出的完整备份文件。</div>
           <div id="backupNote" class="notice" hidden></div>
@@ -1212,7 +1210,6 @@ document.getElementById('logSearch').oninput=loadLogs;
 document.getElementById('refreshLogs').onclick=loadLogs;
 document.getElementById('exportBackup').onclick=exportFullBackup;
 document.getElementById('importBackup').onclick=()=>document.getElementById('backupFile').click();
-document.getElementById('openVipToolCenterBackup').onclick=()=>window.open('./toolbox/index.html','_blank','noopener');
 document.getElementById('backupFile').onchange=async e=>{const file=e.target.files?.[0];if(file)await importFullBackup(file);e.target.value=''};
 document.getElementById('logoutBtn').onclick=()=>{localStorage.removeItem('mVIP_admin');location.reload()};
 if(localStorage.getItem('mVIP_admin')==='1')enter();
