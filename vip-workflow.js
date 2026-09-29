@@ -3,7 +3,7 @@
 
   var DATA_URL='./data/chat-flows.json?v=20260929-1';
   var STORAGE_PREFIX='mosen_vip_customer_flow_v1:';
-  var OLD_BASE='https://mosen6266-netizen.github.io/mosen6266/';
+  var OLD_BASE='./toolbox/';
   var flowBundle=null;
   var currentCustomer=null;
   var observer=null;
@@ -267,7 +267,7 @@
       '<section class="vip-flow-panel" role="dialog" aria-modal="true">'+
         '<header class="vip-flow-head">'+
           '<div class="vip-flow-head-main"><div class="vip-flow-kicker">MOSEN VIP · 客户独立流程</div><div class="vip-flow-title">'+esc(customerName||'未命名客户')+'</div><div class="vip-flow-sub">每个客户的“已发送”勾选状态单独保存，不影响其他客户，也不会写回原两个仓库。</div></div>'+
-          '<div class="vip-flow-head-actions"><button type="button" class="vip-flow-action" data-vip-open-launcher>打开墨森打开器</button><button type="button" class="vip-flow-icon-btn" data-vip-close aria-label="关闭">×</button></div>'+
+          '<div class="vip-flow-head-actions"><button type="button" class="vip-flow-action" data-vip-open-launcher>打开 VIP 工具箱</button><button type="button" class="vip-flow-icon-btn" data-vip-close aria-label="关闭">×</button></div>'+
         '</header>'+
         '<div class="vip-flow-body"><aside class="vip-flow-sidebar" data-vip-sidebar><div class="vip-flow-empty">正在读取流程…</div></aside><main class="vip-flow-main" data-vip-main><div class="vip-flow-empty">正在读取流程内容…</div></main></div>'+
       '</section>';
