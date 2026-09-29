@@ -1,0 +1,39 @@
+name: Diagnose VIP Base44 Access
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/diagnose-base44.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Test anonymous Base44 SDK access
+        run: |
+          mkdir /tmp/vip-test
+          cd /tmp/vip-test
+          npm init -y >/dev/null 2>&1
+          npm install @base44/sdk >/dev/null 2>&1
+          cat > test.mjs <<'EOF'
+          import { createClient } from '@base44/sdk';
+          const appId='6abb8b9e7bc76cdfe0aeb883';
+          const base44=createClient({appId});
+          try {
+            const reps=await base44.entities.VIPSalesRep.list('-created_date',50);
+            console.log('REPS_OK', Array.isArray(reps)?reps.length:JSON.stringify(reps).slice(0,200));
+          } catch(e) {
+            console.log('REPS_ERR', e?.message||String(e));
+          }
+          try {
+            const customers=await base44.entities.VIPCustomer.list('-created_date',100);
+            console.log('CUSTOMERS_OK', Array.isArray(customers)?customers.length:JSON.stringify(customers).slice(0,200));
+          } catch(e) {
+            console.log('CUSTOMERS_ERR', e?.message||String(e));
+          }
+          EOF
+          node test.mjs
