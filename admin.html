@@ -1406,7 +1406,7 @@ async function importV5Backup(file){
     downloadBlob(safety.blob,'mosen_VIP-V5-恢复前安全备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip');
 
     showMessage(note,'正在恢复 Base44 全部数据，实时刷新已暂停…','warn');
-    for(const name of ['VIPActivityLog','VIPWorkflowFlowProgress','VIPWorkflowProgress','VIPToolCatalog','VIPDashboardStats','VIPWorkflowDefinition','VIPCustomer','VIPProgressStage','VIPFormField','VIPSalesRep']){
+    for(const name of ['VIPActivityLog','VIPWorkflowFlowProgress','VIPWorkflowProgress','VIPToolCatalog','VIPDashboardStats','VIPSystemStats','VIPWorkflowDefinition','VIPCustomer','VIPProgressStage','VIPFormField','VIPSalesRep']){
       try{await wipeEntity(name)}catch(_){}
     }
     const workflowAssetUrlMap=await restoreWorkflowAssetsFromZip(zip,manifest,note);
