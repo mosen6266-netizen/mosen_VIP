@@ -109,6 +109,47 @@
     ensureRealtime();
     return()=>listeners.delete(fn);
   }
+  async function writeCloudCatalog(catalog,updatedBy){
+    const base44=await getBase44();
+    const rows=await base44.entities.VIPToolCatalog.filter({key:'main'},'-updated_date',1,0);
+    const row=Array.isArray(rows)?rows[0]:(rows?.items||[])[0];
+    const payload={
+      key:'main',
+      version:Number(catalog.version||1),
+      items:catalog.items||[],
+      updated_at:catalog.updatedAt||new Date().toISOString(),
+      updated_by:updatedBy||'tool-center',
+      source_hash:'tool-catalog.json'
+    };
+    if(row)await base44.entities.VIPToolCatalog.update(row.id,payload);
+    else await base44.entities.VIPToolCatalog.create(payload);
+  }
+  async function syncOrder(order){
+    const current=await load(true);
+    const byId=new Map((current.items||[]).map(x=>[String(x.id),{...x}]));
+    const items=[],placed=new Set();
+    ['us','de','other'].forEach(cat=>{
+      (Array.isArray(order&&order[cat])?order[cat]:[]).forEach(id=>{
+        id=String(id);
+        const item=byId.get(id);
+        if(!item||placed.has(id))return;
+        item.category=cat;
+        items.push(item);placed.add(id);
+      });
+    });
+    (current.items||[]).forEach(item=>{
+      const id=String(item.id);
+      if(placed.has(id))return;
+      items.push({...item,category:normalizeCategory(item.category)});
+    });
+    items.forEach((item,i)=>item.order=i+1);
+    const next=normalize({version:Number(current.version||1)+1,updatedAt:new Date().toISOString(),items});
+    await writeCloudCatalog(next,'tool-center-order');
+    cache=next;cacheAt=Date.now();
+    listeners.forEach(fn=>{try{fn(cache)}catch(_){ }});
+    return next;
+  }
+
   function find(catalog,ref){
     if(!catalog||!ref)return null;
     const items=catalog.items||[];
@@ -132,5 +173,5 @@
     return title?items.find(x=>cleanText(x.title)===title&&x.category===category)||null:null;
   }
 
-  window.VIPToolCatalog={load,subscribe,find,toolboxUrl,previewUrl,normalizeCategory,refresh:refreshAndNotify};
+  window.VIPToolCatalog={load,subscribe,find,toolboxUrl,previewUrl,normalizeCategory,refresh:refreshAndNotify,syncOrder};
 })();
