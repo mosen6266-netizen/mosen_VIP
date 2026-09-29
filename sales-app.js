@@ -98,7 +98,7 @@ function matchesSalesFilters(r){
 }
 async function refreshMyCustomerCounts(){
   let stat=await readDashboardStat('rep:'+username);
-  const verifyKey='mVIP_rep_counts_verified_v2_'+username;
+  const verifyKey='mVIP_rep_counts_verified_v3_'+username;
   let shouldRecount=!stat||!sessionStorage.getItem(verifyKey);
   try{
     const newest=unwrap(await base44.entities.VIPCustomer.filter({rep_username:username,duplicate_record:{$ne:true}},'-updated_date',1,0))[0];
