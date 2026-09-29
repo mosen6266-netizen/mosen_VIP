@@ -26,10 +26,14 @@ jobs:
         uses: actions/configure-pages@v5
         with:
           enablement: true
+      - name: Build deterministic site
+        env:
+          BUILD_TIME: ${{ github.event.head_commit.timestamp }}
+        run: python3 scripts/build-pages.py
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: _site
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
