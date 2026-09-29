@@ -63,22 +63,28 @@ export async function reconcileDashboardStats(base44){
   for(const [rep,x] of counts) await upsertStat(base44,'rep:'+rep,{scope:'rep',rep_username:rep,active_customers:x.active,archived_customers:x.archived,today_active_customers:x.today});
   return {active,archived,today,reps:counts.size};
 }
-export async function archiveOldLogs(base44,{days=90,limit=200}={}){
+export async function archiveOldLogs(base44,{days=90,limit=1000}={}){
   const cutoff=new Date(Date.now()-days*DAY).toISOString().slice(0,10);
-  const found=await base44.entities.VIPActivityLog.filter({event_day:{$lt:cutoff}},'event_time',limit,0);
-  const rows=Array.isArray(found)?found:(found?.items||[]);
-  if(!rows.length)return {archived:0,cutoff};
-  const now=new Date().toISOString();
-  const records=rows.map(r=>({
-    original_id:String(r.id||''),actor_username:r.actor_username||'',actor_display_name:r.actor_display_name||'',actor_type:r.actor_type||'',
-    action_type:r.action_type||'update',customer_id:r.customer_id||'',customer_name:r.customer_name||'',target_key:r.target_key||'',
-    target_label:r.target_label||'',old_value:r.old_value||'',new_value:r.new_value||'',message:r.message||'',
-    event_time:r.event_time||r.created_date||'',event_day:r.event_day||String(r.event_time||r.created_date||'').slice(0,10),
-    metadata:r.metadata||{},archived_at:now,archive_month:String(r.event_day||r.event_time||'').slice(0,7)
-  }));
-  await createEntityBatch(base44.entities.VIPActivityLogArchive,records,5);
-  for(const r of rows){ try{await base44.entities.VIPActivityLog.delete(r.id)}catch(_){} }
-  return {archived:rows.length,cutoff};
+  let archived=0;
+  while(archived<limit){
+    const take=Math.min(200,limit-archived);
+    const found=await base44.entities.VIPActivityLog.filter({event_day:{$lt:cutoff}},'event_time',take,0);
+    const rows=Array.isArray(found)?found:(found?.items||[]);
+    if(!rows.length)break;
+    const now=new Date().toISOString();
+    const records=rows.map(r=>({
+      original_id:String(r.id||''),actor_username:r.actor_username||'',actor_display_name:r.actor_display_name||'',actor_type:r.actor_type||'',
+      action_type:r.action_type||'update',customer_id:r.customer_id||'',customer_name:r.customer_name||'',target_key:r.target_key||'',
+      target_label:r.target_label||'',old_value:r.old_value||'',new_value:r.new_value||'',message:r.message||'',
+      event_time:r.event_time||r.created_date||'',event_day:r.event_day||String(r.event_time||r.created_date||'').slice(0,10),
+      metadata:r.metadata||{},archived_at:now,archive_month:String(r.event_day||r.event_time||'').slice(0,7)
+    }));
+    await createEntityBatch(base44.entities.VIPActivityLogArchive,records,5);
+    for(const r of rows){ await base44.entities.VIPActivityLog.delete(r.id) }
+    archived+=rows.length;
+    if(rows.length<take)break;
+  }
+  return {archived,cutoff};
 }
 export async function runDailyMaintenance(base44){
   const key='mVIP_maintenance_'+new Date().toISOString().slice(0,10);
@@ -86,7 +92,7 @@ export async function runDailyMaintenance(base44){
   const result={};
   try{result.stats=await reconcileDashboardStats(base44)}catch(e){result.stats_error=String(e?.message||e)}
   try{result.index=await ensureCustomerIndex(base44,{},1000)}catch(e){result.index_error=String(e?.message||e)}
-  try{result.logs=await archiveOldLogs(base44,{days:90,limit:200})}catch(e){result.logs_error=String(e?.message||e)}
+  try{result.logs=await archiveOldLogs(base44,{days:90,limit:1000})}catch(e){result.logs_error=String(e?.message||e)}
   localStorage.setItem(key,JSON.stringify({at:new Date().toISOString(),result}));
   return result;
 }
