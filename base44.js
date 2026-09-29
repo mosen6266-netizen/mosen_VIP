@@ -1,4 +1,4 @@
-import { createClient } from 'https://esm.sh/@base44/sdk?bundle';
+import { createClient } from 'https://esm.sh/@base44/sdk@0.8.52?bundle';
 import { APP_ID } from './config.js?v=20260929-standalone-2';
 
 export const base44 = createClient({ appId: APP_ID });
