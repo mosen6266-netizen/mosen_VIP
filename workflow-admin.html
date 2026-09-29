@@ -14,7 +14,7 @@
 button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;grid-template-columns:280px minmax(0,1fr)}
 .side{background:#fff;border-right:1px solid var(--line);padding:16px;position:sticky;top:0;height:100vh;overflow:auto}
 .brand{font-size:12px;font-weight:900;color:var(--purple);letter-spacing:.05em}.side h1{font-size:19px;margin:5px 0 4px}.sub{font-size:11px;color:var(--muted);line-height:1.5}
-.flow-actions{display:flex;gap:7px;margin:14px 0}.btn{border:0;border-radius:9px;padding:8px 10px;font-size:12px;font-weight:800;cursor:pointer;background:#eef1f5;color:#344054}.btn.primary{background:var(--purple);color:#fff}.btn.danger{background:#fff0ef;color:var(--danger)}.btn:disabled{opacity:.55;cursor:not-allowed}
+.flow-actions{display:flex;gap:7px;margin:14px 0 8px;flex-wrap:wrap}.category-actions{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap}.btn{border:0;border-radius:9px;padding:8px 10px;font-size:12px;font-weight:800;cursor:pointer;background:#eef1f5;color:#344054}.btn.primary{background:var(--purple);color:#fff}.btn.danger{background:#fff0ef;color:var(--danger)}.btn:disabled{opacity:.55;cursor:not-allowed}
 .flow-list{display:grid;gap:5px}.flow-group-title{margin:12px 8px 4px;font-size:10px;font-weight:900;color:#8b95a7;letter-spacing:.08em}.flow-group-title:first-child{margin-top:2px}.flow-item{width:100%;border:0;background:transparent;border-radius:11px;padding:10px;text-align:left;cursor:pointer}.flow-item:hover{background:#f6f4ff}.flow-item.active{background:#eeeaff;color:#5c38d0}.flow-item b{display:block;font-size:13px}.flow-item span{display:block;font-size:10px;color:#8a93a4;margin-top:3px}.flow-category-select{border:1px solid #d9dee7;border-radius:9px;padding:7px 9px;background:#fff;color:#344054;font-size:11px;font-weight:800}
 .main{min-width:0;padding:18px}.toolbar{background:#fff;border:1px solid var(--line);border-radius:15px;padding:14px 16px;display:flex;gap:10px;align-items:center;position:sticky;top:12px;z-index:5;box-shadow:0 8px 28px rgba(20,29,48,.05)}
 .toolbar h2{font-size:18px;margin:0}.toolbar .meta{font-size:11px;color:var(--muted);margin-top:3px}.spacer{flex:1}.save-status{font-size:11px;color:#677287}
@@ -40,12 +40,14 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
       <button class="btn" id="renameFlow">改流程名</button>
       <button class="btn danger" id="deleteFlow">删除流程</button>
     </div>
+    <div class="category-actions">
+      <button class="btn" id="addCategory">新建分类</button>
+      <button class="btn" id="renameCategory">改分类名</button>
+      <button class="btn danger" id="deleteCategory">删除分类</button>
+    </div>
     <div class="field" style="margin:0 0 12px">
       <label>当前流程分类</label>
-      <select id="flowCategorySelect" class="flow-category-select">
-        <option value="de">德国流程</option>
-        <option value="us">美国流程</option>
-      </select>
+      <select id="flowCategorySelect" class="flow-category-select"></select>
     </div>
     <div class="flow-list" id="flowList"></div>
   </aside>
@@ -108,6 +110,7 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
   </div>
 </div>
 
+<script src="./vip-dialogs.js"></script>
 <script type="module">
 import { base44, esc } from './base44.js';
 
@@ -122,17 +125,35 @@ let pendingAttachments=[],pendingToolLinks=[],toolCatalog=[];
 function uid(prefix='step'){return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)}
 function unwrap(v){return Array.isArray(v)?v:(v?.items||[])}
 function activeFlow(){return (state.workflows||[]).find(f=>String(f.id)===String(activeFlowId))||state.workflows?.[0]||null}
-function flowCategory(f){
-  const explicit=String(f?.category||'').toLowerCase();
-  if(explicit==='de'||explicit==='us')return explicit;
+function inferredCategory(f){
+  const explicit=String(f?.category||'').trim();
+  if(explicit)return explicit;
   const name=String(f?.name||'');
-  if(name.includes('德国'))return 'de';
   if(name.includes('美国'))return 'us';
+  if(name.includes('德国'))return 'de';
   return 'de';
 }
-function normalizeFlowCategories(){
-  (state.workflows||[]).forEach(f=>{if(!['de','us'].includes(String(f.category||'').toLowerCase()))f.category=flowCategory(f)});
+function ensureCategories(){
+  if(!Array.isArray(state.categories)||!state.categories.length){
+    state.categories=[
+      {id:'de',name:'德国流程',order:1},
+      {id:'us',name:'美国流程',order:2}
+    ];
+  }
+  state.categories=state.categories.map((x,i)=>({
+    id:String(x?.id||uid('cat')),
+    name:String(x?.name||('分类 '+(i+1))),
+    order:Number.isFinite(Number(x?.order))?Number(x.order):i+1
+  })).sort((a,b)=>a.order-b.order);
+  (state.workflows||[]).forEach(f=>{
+    const cat=inferredCategory(f);
+    if(!state.categories.some(x=>String(x.id)===String(cat))){
+      state.categories.push({id:cat,name:cat==='us'?'美国流程':cat==='de'?'德国流程':cat,order:state.categories.length+1});
+    }
+    f.category=cat;
+  });
 }
+function categoryById(id){return (state.categories||[]).find(x=>String(x.id)===String(id))||null}
 function setStatus(text,type=''){const el=$('#saveStatus');el.textContent=text;el.style.color=type==='err'?'#b42318':type==='ok'?'#087443':'#677287'}
 function safeClone(v){return JSON.parse(JSON.stringify(v))}
 function formatBytes(n){n=Number(n||0);if(!n)return'';const u=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return (i?n.toFixed(1):Math.round(n))+' '+u[i]}
@@ -239,7 +260,7 @@ async function load(){
     row=rows[0]||null;
     if(!row||!row.bundle||!Array.isArray(row.bundle.workflows))throw new Error('未找到话术数据');
     state=safeClone(row.bundle);
-    normalizeFlowCategories();
+    ensureCategories();
     if(!activeFlowId||!state.workflows.some(f=>String(f.id)===String(activeFlowId)))activeFlowId=state.activeWorkflowId||state.workflows[0]?.id||'';
     render();
     setStatus('已同步','ok');
@@ -267,31 +288,38 @@ async function persist(message='已保存'){
     return true;
   }catch(e){
     setStatus('保存失败','err');
-    alert('保存失败：'+(e?.message||String(e)));
+    vipAlert('保存失败：'+(e?.message||String(e)),{title:'保存失败'});
     return false;
   }finally{busy=false}
 }
 
 function render(){
+  ensureCategories();
   const flows=state.workflows||[];
-  const groups=[
-    {key:'de',label:'德国流程'},
-    {key:'us',label:'美国流程'}
-  ];
   let sideHtml='';
-  groups.forEach(g=>{
-    const items=flows.filter(f=>flowCategory(f)===g.key);
-    if(!items.length)return;
-    sideHtml+='<div class="flow-group-title">'+g.label+'</div>';
-    sideHtml+=items.map(f=>'<button class="flow-item '+(String(f.id)===String(activeFlowId)?'active':'')+'" data-flow="'+esc(f.id)+'"><b>'+esc(f.name||'未命名流程')+'</b><span>'+(f.steps?.length||0)+' 条话术</span></button>').join('');
+  (state.categories||[]).forEach(cat=>{
+    const items=flows.filter(f=>String(f.category)===String(cat.id));
+    sideHtml+='<div class="flow-group-title">'+esc(cat.name)+'</div>';
+    sideHtml+=items.length
+      ?items.map(f=>'<button class="flow-item '+(String(f.id)===String(activeFlowId)?'active':'')+'" data-flow="'+esc(f.id)+'"><b>'+esc(f.name||'未命名流程')+'</b><span>'+(f.steps?.length||0)+' 条话术</span></button>').join('')
+      :'<div class="empty-mini" style="padding:6px 10px">暂无流程</div>';
   });
-  $('#flowList').innerHTML=sideHtml||'<div class="empty">暂无流程</div>';
+  $('#flowList').innerHTML=sideHtml||'<div class="empty">暂无分类</div>';
   $('#flowList').querySelectorAll('[data-flow]').forEach(b=>b.onclick=()=>{activeFlowId=b.dataset.flow;render()});
   const flow=activeFlow();
   const categorySelect=$('#flowCategorySelect');
-  if(categorySelect){categorySelect.disabled=!flow;if(flow)categorySelect.value=flowCategory(flow)}
+  if(categorySelect){
+    categorySelect.innerHTML=(state.categories||[]).map(cat=>'<option value="'+esc(cat.id)+'">'+esc(cat.name)+'</option>').join('');
+    categorySelect.disabled=!flow;
+    if(flow)categorySelect.value=String(flow.category||'');
+  }
+  const currentCat=flow?categoryById(flow.category):null;
+  $('#renameCategory').disabled=!currentCat;
+  $('#deleteCategory').disabled=!currentCat;
+  const categoryLabel=currentCat?currentCat.name:'';
+
   $('#flowTitle').textContent=flow?.name||'暂无流程';
-  $('#flowMeta').textContent=flow?'共 '+(flow.steps?.length||0)+' 条话术 · 修改后自动同步给业务员':'请先新增一个流程';
+  $('#flowMeta').textContent=flow?(categoryLabel+' · 共 '+(flow.steps?.length||0)+' 条话术 · 修改后自动同步给业务员'):'请先新增一个流程';
   $('#addStep').disabled=!flow;
   $('#renameFlow').disabled=!flow;
   $('#deleteFlow').disabled=!flow;
@@ -343,7 +371,7 @@ async function saveStep(){
 async function deleteStep(id){
   const flow=activeFlow();if(!flow)return;
   const s=(flow.steps||[]).find(x=>String(x.id)===String(id));
-  if(!confirm('确定删除「'+(s?.title||'这条话术')+'」吗？'))return;
+  if(!await vipConfirm('确定删除「'+(s?.title||'这条话术')+'」吗？',{title:'删除话术',confirmText:'删除',danger:true}))return;
   flow.steps=(flow.steps||[]).filter(x=>String(x.id)!==String(id));
   if(await persist('话术已删除'))render();
 }
@@ -361,11 +389,11 @@ $('#closeStepModal').onclick=closeStep;$('#cancelStep').onclick=closeStep;$('#sa
 $('#attachmentFile').addEventListener('change',async e=>{
   const files=[...(e.target.files||[])]; if(!files.length)return;
   for(const file of files){
-    if(!String(file.type||'').startsWith('image/')){alert(file.name+' 不是图片文件。');continue}
-    if(file.size>8*1024*1024){alert(file.name+' 超过 8MB，请压缩图片后再上传。');continue}
+    if(!String(file.type||'').startsWith('image/')){vipAlert(file.name+' 不是图片文件。',{title:'无法添加图片'});continue}
+    if(file.size>8*1024*1024){vipAlert(file.name+' 超过 8MB，请压缩图片后再上传。',{title:'图片过大'});continue}
     try{
       pendingAttachments.push({id:attachmentId(),name:file.name,type:file.type||'',size:file.size,data:await fileToData(file)});
-    }catch(err){alert('读取图片失败：'+file.name)}
+    }catch(err){vipAlert('读取图片失败：'+file.name,{title:'读取失败'})}
   }
   e.target.value='';renderAttachments();
 });
@@ -374,7 +402,7 @@ function addShortcutFrom(selectId){
   if(!Number.isInteger(i)||!toolCatalog[i])return;
   const t=toolCatalog[i];
   if(!['de','us'].includes(String(t.category||'').toLowerCase()))return;
-  if(pendingToolLinks.some(x=>String(x.path||'')===String(normalizeToolPath(t.path)))){alert('这个快捷方式已经添加过了。');return}
+  if(pendingToolLinks.some(x=>String(x.path||'')===String(normalizeToolPath(t.path)))){vipAlert('这个快捷方式已经添加过了。',{title:'重复快捷方式'});return}
   pendingToolLinks.push({id:toolId(),title:t.title,path:normalizeToolPath(t.path),category:t.category});
   sel.value='';renderToolLinks();
 }
@@ -384,28 +412,69 @@ $('#stepModal').onclick=e=>{if(e.target===$('#stepModal'))closeStep()};
 $('#reloadBtn').onclick=load;
 
 $('#addFlow').onclick=async()=>{
-  const name=prompt('请输入新流程名称：');if(!name?.trim())return;
-  const region=prompt('请选择流程分类：输入“德国”或“美国”','德国');
-  if(region===null)return;
-  const category=String(region).trim().toLowerCase()==='美国'||String(region).trim().toLowerCase()==='us'?'us':'de';
+  ensureCategories();
+  const name=await vipPrompt('请输入新流程名称：',{title:'新增流程',placeholder:'例如 德国客服跟进流程',confirmText:'下一步'});
+  if(!name||!name.trim())return;
+  const category=await vipSelect('请选择新流程所属分类：',{
+    title:'选择流程分类',
+    value:activeFlow()?.category||state.categories?.[0]?.id||'',
+    options:(state.categories||[]).map(x=>({value:x.id,label:x.name})),
+    confirmText:'创建'
+  });
+  if(!category)return;
   const id=uid('flow');state.workflows=Array.isArray(state.workflows)?state.workflows:[];
   state.workflows.push({id,name:name.trim(),category,description:'',color:'#6d4aff',steps:[]});activeFlowId=id;
   if(await persist('流程已新增'))render();
 };
+
+$('#addCategory').onclick=async()=>{
+  const name=await vipPrompt('请输入新分类名称：',{title:'新建分类',placeholder:'例如 加拿大流程',confirmText:'创建'});
+  if(!name||!name.trim())return;
+  ensureCategories();
+  if(state.categories.some(x=>x.name.trim()===name.trim())){vipAlert('已经存在同名分类。',{title:'无法创建'});return}
+  const id=uid('cat');
+  state.categories.push({id,name:name.trim(),order:state.categories.length+1});
+  if(await persist('分类已新增'))render();
+};
+
+$('#renameCategory').onclick=async()=>{
+  const flow=activeFlow();if(!flow)return;
+  const cat=categoryById(flow.category);if(!cat)return;
+  const name=await vipPrompt('修改分类名称：',{title:'修改分类',value:cat.name,confirmText:'保存'});
+  if(!name||!name.trim())return;
+  cat.name=name.trim();
+  if(await persist('分类名称已修改'))render();
+};
+
+$('#deleteCategory').onclick=async()=>{
+  const flow=activeFlow();if(!flow)return;
+  const cat=categoryById(flow.category);if(!cat)return;
+  const used=(state.workflows||[]).filter(x=>String(x.category)===String(cat.id));
+  if(used.length){
+    vipAlert('这个分类下面还有 '+used.length+' 个流程。请先把这些流程移动到其他分类，再删除该分类。',{title:'暂时不能删除'});
+    return;
+  }
+  if(!await vipConfirm('确定删除分类「'+cat.name+'」吗？',{title:'删除分类',confirmText:'删除',danger:true}))return;
+  state.categories=state.categories.filter(x=>String(x.id)!==String(cat.id));
+  if(await persist('分类已删除'))render();
+};
+
 $('#flowCategorySelect').onchange=async()=>{
   const f=activeFlow();if(!f)return;
-  f.category=$('#flowCategorySelect').value==='us'?'us':'de';
+  f.category=$('#flowCategorySelect').value;
   if(await persist('流程分类已修改'))render();
 };
 
 $('#renameFlow').onclick=async()=>{
   const f=activeFlow();if(!f)return;
-  const name=prompt('修改流程名称：',f.name||'');if(!name?.trim())return;
+  const name=await vipPrompt('修改流程名称：',{title:'修改流程名称',value:f.name||'',confirmText:'保存'});
+  if(!name||!name.trim())return;
   f.name=name.trim();if(await persist('流程名称已修改'))render();
 };
+
 $('#deleteFlow').onclick=async()=>{
   const f=activeFlow();if(!f)return;
-  if(!confirm('确定删除整个流程「'+(f.name||'未命名流程')+'」吗？其中所有话术都会一起删除。'))return;
+  if(!await vipConfirm('确定删除整个流程「'+(f.name||'未命名流程')+'」吗？其中所有话术都会一起删除。',{title:'删除流程',confirmText:'删除',danger:true}))return;
   state.workflows=(state.workflows||[]).filter(x=>String(x.id)!==String(f.id));
   activeFlowId=state.workflows[0]?.id||'';
   if(await persist('流程已删除'))render();
