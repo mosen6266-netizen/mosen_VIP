@@ -448,8 +448,11 @@ async function loadLogs(reset=false){
     const skip=(logPage-1)*LOG_PAGE_SIZE;
     const selectedDate=document.getElementById('logDate')?.value||localDateKey();
     const archiveCutoff=new Date(Date.now()-90*86400000).toISOString().slice(0,10);
-    const logEntity=selectedDate<archiveCutoff?base44.entities.VIPActivityLogArchive:base44.entities.VIPActivityLog;
-    let rows=unwrap(await logEntity.filter(logServerQuery(),'-event_time',LOG_PAGE_SIZE+1,skip));
+    const usingArchive=selectedDate<archiveCutoff;
+    const logEntity=usingArchive?base44.entities.VIPActivityLogArchive:base44.entities.VIPActivityLog;
+    const query=logServerQuery();
+    if(!usingArchive)query.migration_duplicate={$ne:true};
+    let rows=unwrap(await logEntity.filter(query,'-event_time',LOG_PAGE_SIZE+1,skip));
     logHasNext=rows.length>LOG_PAGE_SIZE;
     activityLogs=rows.slice(0,LOG_PAGE_SIZE);
     document.getElementById('sidebarLogCount').textContent=logHasNext?(LOG_PAGE_SIZE+'+'):String(activityLogs.length);
@@ -491,7 +494,7 @@ async function collectBackupEntities(){
     VIPFormField:rows[1].map(backupRow),
     VIPProgressStage:rows[2].map(backupRow),
     VIPCustomer:rows[3].map(backupRow),
-    VIPActivityLog:rows[4].map(backupRow),
+    VIPActivityLog:rows[4].filter(x=>x.migration_duplicate!==true).map(backupRow),
     VIPWorkflowDefinition:rows[5].map(backupRow),
     VIPWorkflowProgress:rows[6].map(backupRow),
     VIPWorkflowFlowProgress:rows[7].map(backupRow),
