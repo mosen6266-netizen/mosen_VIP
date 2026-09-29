@@ -40,6 +40,10 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
       <button class="btn" id="renameFlow">改流程名</button>
       <button class="btn danger" id="deleteFlow">删除流程</button>
     </div>
+    <div class="field" style="margin:8px 0 7px">
+      <label>分类管理</label>
+      <select id="categoryManageSelect" class="flow-category-select"></select>
+    </div>
     <div class="category-actions">
       <button class="btn" id="addCategory">新建分类</button>
       <button class="btn" id="renameCategory">改分类名</button>
@@ -314,8 +318,16 @@ function render(){
     if(flow)categorySelect.value=String(flow.category||'');
   }
   const currentCat=flow?categoryById(flow.category):null;
-  $('#renameCategory').disabled=!currentCat;
-  $('#deleteCategory').disabled=!currentCat;
+  const manageSelect=$('#categoryManageSelect');
+  if(manageSelect){
+    const oldValue=manageSelect.value;
+    manageSelect.innerHTML=(state.categories||[]).map(cat=>'<option value="'+esc(cat.id)+'">'+esc(cat.name)+'</option>').join('');
+    if(oldValue&&state.categories.some(x=>String(x.id)===String(oldValue)))manageSelect.value=oldValue;
+    else if(currentCat)manageSelect.value=currentCat.id;
+  }
+  const managedCat=manageSelect?categoryById(manageSelect.value):currentCat;
+  $('#renameCategory').disabled=!managedCat;
+  $('#deleteCategory').disabled=!managedCat;
   const categoryLabel=currentCat?currentCat.name:'';
 
   $('#flowTitle').textContent=flow?.name||'暂无流程';
@@ -434,12 +446,11 @@ $('#addCategory').onclick=async()=>{
   if(state.categories.some(x=>x.name.trim()===name.trim())){vipAlert('已经存在同名分类。',{title:'无法创建'});return}
   const id=uid('cat');
   state.categories.push({id,name:name.trim(),order:state.categories.length+1});
-  if(await persist('分类已新增'))render();
+  if(await persist('分类已新增')){render();setTimeout(()=>{$('#categoryManageSelect').value=id},0)}
 };
 
 $('#renameCategory').onclick=async()=>{
-  const flow=activeFlow();if(!flow)return;
-  const cat=categoryById(flow.category);if(!cat)return;
+  const cat=categoryById($('#categoryManageSelect').value);if(!cat)return;
   const name=await vipPrompt('修改分类名称：',{title:'修改分类',value:cat.name,confirmText:'保存'});
   if(!name||!name.trim())return;
   cat.name=name.trim();
@@ -447,8 +458,7 @@ $('#renameCategory').onclick=async()=>{
 };
 
 $('#deleteCategory').onclick=async()=>{
-  const flow=activeFlow();if(!flow)return;
-  const cat=categoryById(flow.category);if(!cat)return;
+  const cat=categoryById($('#categoryManageSelect').value);if(!cat)return;
   const used=(state.workflows||[]).filter(x=>String(x.category)===String(cat.id));
   if(used.length){
     vipAlert('这个分类下面还有 '+used.length+' 个流程。请先把这些流程移动到其他分类，再删除该分类。',{title:'暂时不能删除'});
