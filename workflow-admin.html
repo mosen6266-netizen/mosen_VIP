@@ -160,8 +160,8 @@ async function loadToolCatalog(){
   });
   const de=toolCatalog.map((t,i)=>({t,i})).filter(x=>String(x.t.category).toLowerCase()==='de');
   const us=toolCatalog.map((t,i)=>({t,i})).filter(x=>String(x.t.category).toLowerCase()==='us');
-  $('#shortcutSelectDe').innerHTML='<option value="">选择德国工具…</option>'+de.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+' · '+esc(x.t.path)+'</option>').join('');
-  $('#shortcutSelectUs').innerHTML='<option value="">选择美国工具…</option>'+us.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+' · '+esc(x.t.path)+'</option>').join('');
+  $('#shortcutSelectDe').innerHTML='<option value="">选择德国工具…</option>'+de.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+'</option>').join('');
+  $('#shortcutSelectUs').innerHTML='<option value="">选择美国工具…</option>'+us.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+'</option>').join('');
 }
 function renderAttachments(){
   const box=$('#attachmentList');
