@@ -848,7 +848,8 @@ function normalizeLegacyEntities(e){
     VIPWorkflowProgress:e.VIPWorkflowProgress||[],
     VIPWorkflowFlowProgress:e.VIPWorkflowFlowProgress||[],
     VIPToolCatalog:e.VIPToolCatalog||[],
-    VIPDashboardStats:e.VIPDashboardStats||[]
+    VIPDashboardStats:e.VIPDashboardStats||[],
+    VIPSystemStats:e.VIPSystemStats||[]
   };
 }
 
@@ -954,6 +955,7 @@ async function restoreEntities(entities){
 
   for(const row of e.VIPToolCatalog||[])await base44.entities.VIPToolCatalog.create(withoutOldId(row));
   for(const row of e.VIPDashboardStats||[])await base44.entities.VIPDashboardStats.create(withoutOldId(row));
+  for(const row of e.VIPSystemStats||[])await base44.entities.VIPSystemStats.create(withoutOldId(row));
 }
 
 async function githubWrite(path,token,options={}){
