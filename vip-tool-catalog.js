@@ -56,12 +56,34 @@
     if(!r.ok)throw new Error('读取工具目录失败 ('+r.status+')');
     return normalize(await r.json());
   }
+  async function mirrorCloud(catalog){
+    try{
+      const base44=await getBase44();
+      const rows=await base44.entities.VIPToolCatalog.filter({key:'main'},'-updated_date',1,0);
+      const row=Array.isArray(rows)?rows[0]:(rows?.items||[])[0];
+      const payload={
+        key:'main',
+        version:Number(catalog.version||1),
+        items:catalog.items||[],
+        updated_at:catalog.updatedAt||new Date().toISOString(),
+        updated_by:'catalog-mirror',
+        source_hash:'tool-catalog.json'
+      };
+      if(row)await base44.entities.VIPToolCatalog.update(row.id,payload);
+      else await base44.entities.VIPToolCatalog.create(payload);
+    }catch(_){}
+  }
+  function catalogTime(x){const n=Date.parse(x?.updatedAt||'');return Number.isFinite(n)?n:0}
   async function load(force){
     if(!force&&cache&&Date.now()-cacheAt<CACHE_MS)return cache;
     if(pending&&!force)return pending;
     pending=(async()=>{
-      try{cache=await loadCloud()}
-      catch(_){cache=await loadJson()}
+      const [cloudRes,jsonRes]=await Promise.allSettled([loadCloud(),loadJson()]);
+      const cloud=cloudRes.status==='fulfilled'?cloudRes.value:null;
+      const json=jsonRes.status==='fulfilled'?jsonRes.value:null;
+      if(!cloud&&!json)throw(cloudRes.reason||jsonRes.reason||new Error('工具目录不可用'));
+      cache=(!cloud|| (json&&catalogTime(json)>catalogTime(cloud)))?json:cloud;
+      if(json&&cache===json&&(!cloud||catalogTime(json)>catalogTime(cloud)))mirrorCloud(json);
       cacheAt=Date.now();
       pending=null;
       return cache;
