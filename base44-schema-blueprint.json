@@ -1,8 +1,8 @@
 {
   "format": "MOSEN_VIP_BASE44_SCHEMA_BLUEPRINT",
-  "version": 1,
+  "version": 2,
   "app_id": "6abb8b9e7bc76cdfe0aeb883",
-  "generated_at": "2026-09-29T14:01:03.966Z",
+  "generated_at": "2026-09-29T14:25:49.121Z",
   "entities": [
     {
       "entity_name": "VIPActivityLog",
@@ -470,6 +470,49 @@
           "update": {},
           "delete": {}
         }
+      }
+    },
+    {
+      "entity_name": "VIPSystemStats",
+      "entity_schema": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "active_customers": {
+            "type": "number",
+            "default": 0
+          },
+          "archived_customers": {
+            "type": "number",
+            "default": 0
+          },
+          "today_customers": {
+            "type": "number",
+            "default": 0
+          },
+          "by_rep": {
+            "type": "object"
+          },
+          "archived_by_rep": {
+            "type": "object"
+          },
+          "today_by_rep": {
+            "type": "object"
+          },
+          "version": {
+            "type": "number",
+            "default": 1
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "name": "VIPSystemStats"
       }
     }
   ]
