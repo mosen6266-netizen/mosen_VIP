@@ -1,0 +1,18 @@
+name: Scan VIP Standalone References
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/scan-vip-standalone.yml"
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan old runtime references
+        run: |
+          echo "===OLD_RUNTIME_REFS==="
+          grep -RInE --include='*.html' --include='*.js' --include='*.json' --exclude-dir='.git' --exclude='README.md' 'mosen6266([^0-9A-Za-z_-]|$)|github\.io/mosen6266|repos/.*/mosen6266/' . || true
+          echo "===END_REFS==="
