@@ -202,7 +202,8 @@
       saveBtn.textContent = '正在保存全局排序…';
       try{
         await saveGlobalSection('toolCenter', data);
-        setToolNote('全局排序已保存。以后直接发送原来的墨森工具中心链接即可，所有人都会看到这个顺序。', 'saved');
+        if(window.VIPToolCatalog?.syncOrder)await window.VIPToolCatalog.syncOrder(data);
+        setToolNote('全局排序已保存，并已实时同步到业务员侧栏和话术快捷方式。', 'saved');
         saveBtn.textContent = '全局排序已保存';
       }catch(err){
         const msg = err && err.message ? err.message : String(err);
