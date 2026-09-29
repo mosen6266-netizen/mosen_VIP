@@ -250,7 +250,7 @@ function showAdminView(view,repUsername=''){
   if(view==='reps'){document.getElementById('view-reps').hidden=false;document.querySelector('.sidebar-item[data-view="reps"]').classList.add('active')}
   if(view==='fields'){document.getElementById('view-fields').hidden=false;document.querySelector('.sidebar-item[data-view="fields"]').classList.add('active')}
   if(view==='progress'){document.getElementById('view-progress').hidden=false;document.querySelector('.sidebar-item[data-view="progress"]').classList.add('active')}
-  if(view==='workflows'){document.getElementById('view-workflows').hidden=false;document.querySelector('.sidebar-item[data-view="workflows"]').classList.add('active');const frame=document.getElementById('workflowAdminFrame');if(frame&&(!frame.src||frame.src==='about:blank'||!frame.src.includes('20260929-attachments-2')))frame.src='./workflow-admin.html?v=20260929-flow-categories-9'}
+  if(view==='workflows'){document.getElementById('view-workflows').hidden=false;document.querySelector('.sidebar-item[data-view="workflows"]').classList.add('active');const frame=document.getElementById('workflowAdminFrame');if(frame&&(!frame.src||frame.src==='about:blank'||!frame.src.includes('20260929-attachments-2')))frame.src='./workflow-admin.html?v=20260929-categories-dialogs-10'}
   if(view==='logs'){document.getElementById('view-logs').hidden=false;document.querySelector('.sidebar-item[data-view="logs"]').classList.add('active');loadLogs()}
   if(view==='backup'){document.getElementById('view-backup').hidden=false;document.querySelector('.sidebar-item[data-view="backup"]').classList.add('active')}
 }
@@ -989,4 +989,4 @@ document.getElementById('importBackup').onclick=()=>document.getElementById('bac
 document.getElementById('backupFile').onchange=async e=>{const file=e.target.files?.[0];if(file)await importFullBackup(file);e.target.value=''};
 document.getElementById('logoutBtn').onclick=()=>{localStorage.removeItem('mVIP_admin');location.reload()};
 if(localStorage.getItem('mVIP_admin')==='1')enter();
-</script><script src="./vip-workflow.js?v=20260929-compact-shortcuts-3"></script></body></html>
+</script><script src="./vip-workflow.js?v=20260929-custom-categories-4"></script></body></html>
