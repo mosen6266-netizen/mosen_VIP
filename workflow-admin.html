@@ -21,6 +21,7 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
 .modal{position:fixed;inset:0;background:rgba(15,23,42,.48);z-index:50;display:grid;place-items:center;padding:18px}.modal[hidden]{display:none}.modal-card{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;padding:20px;box-shadow:0 30px 90px rgba(15,23,42,.25)}
 .modal-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}.modal-head h3{margin:0;font-size:18px}.grid{display:grid;grid-template-columns:1fr 180px;gap:10px}.field{display:grid;gap:5px;margin-bottom:10px}.field label{font-size:11px;color:#667085;font-weight:800}.field input,.field select,.field textarea{width:100%;border:1px solid #d9dee7;border-radius:10px;padding:9px 10px;outline:none;background:#fff}.field textarea{min-height:115px;resize:vertical}.field textarea.large{min-height:150px}.field input:focus,.field textarea:focus,.field select:focus{border-color:#9b87ee;box-shadow:0 0 0 3px rgba(109,74,255,.08)}
 .notice{margin-top:10px;padding:9px 11px;border-radius:9px;background:#f6f8fa;font-size:11px;color:#667085}.notice.ok{background:#effaf5;color:#087443}.notice.err{background:#fff1f0;color:#b42318}
+.asset-section{margin-top:14px;padding-top:14px;border-top:1px solid #eef1f5}.asset-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}.asset-head b{font-size:12px}.asset-head span{font-size:10px;color:#8a93a4}.asset-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 9px;border:1px solid #e3e7ee;border-radius:9px;background:#fafbfc;margin-top:6px}.asset-row .name{min-width:0;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.asset-row .meta{font-size:9px;color:#98a2b3;margin-top:2px}.asset-add{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;margin-top:7px}.asset-add.three{grid-template-columns:140px minmax(0,1fr) auto}.file-label{position:relative;overflow:hidden}.file-label input{position:absolute;inset:0;opacity:0;cursor:pointer}.empty-mini{font-size:10px;color:#98a2b3;padding:7px 0}
 @media(max-width:850px){.app{grid-template-columns:1fr}.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}.flow-list{display:flex;overflow:auto}.flow-item{min-width:190px}.main{padding:12px}.preview{grid-template-columns:1fr}.toolbar{top:5px}}
 </style>
 </head>
@@ -59,7 +60,35 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
     <div class="field"><label>中文参考</label><textarea class="large" id="stepZh"></textarea></div>
     <div class="field"><label>实际发送内容（德语 / 英语）</label><textarea class="large" id="stepForeign"></textarea></div>
     <div class="field"><label>备注（可选）</label><textarea id="stepNote"></textarea></div>
-    <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+
+    <div class="asset-section">
+      <div class="asset-head"><b>附件</b><span>可上传图片、PDF、文档，也可填写 VIP 内部路径或网址</span></div>
+      <div class="asset-add">
+        <label class="btn file-label">选择附件<input id="attachmentFile" type="file" multiple></label>
+        <div></div>
+      </div>
+      <div class="asset-add">
+        <input id="attachmentPath" placeholder="例如 data/chat-flow-assets/文件.png 或 https://...">
+        <button class="btn" id="addAttachmentPath" type="button">添加路径</button>
+      </div>
+      <div id="attachmentList"></div>
+    </div>
+
+    <div class="asset-section">
+      <div class="asset-head"><b>快捷方式</b><span>选择 VIP 工具，或者手动填写标题和路径</span></div>
+      <div class="asset-add">
+        <select id="shortcutSelect"><option value="">选择 VIP 工具…</option></select>
+        <button class="btn" id="addShortcut" type="button">添加工具</button>
+      </div>
+      <div class="asset-add three">
+        <input id="shortcutTitle" placeholder="快捷方式标题">
+        <input id="shortcutPath" placeholder="例如 网站风险查询.html">
+        <button class="btn" id="addCustomShortcut" type="button">自定义添加</button>
+      </div>
+      <div id="shortcutList"></div>
+    </div>
+
+    <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
       <button class="btn" id="cancelStep">取消</button>
       <button class="btn primary" id="saveStep">保存话术</button>
     </div>
@@ -76,12 +105,61 @@ if(localStorage.getItem('mVIP_admin')!=='1'){
 
 const $=s=>document.querySelector(s);
 let row=null,state={workflows:[]},activeFlowId='',editingStepId='',busy=false;
+let pendingAttachments=[],pendingToolLinks=[],toolCatalog=[];
 
 function uid(prefix='step'){return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)}
 function unwrap(v){return Array.isArray(v)?v:(v?.items||[])}
 function activeFlow(){return (state.workflows||[]).find(f=>String(f.id)===String(activeFlowId))||state.workflows?.[0]||null}
 function setStatus(text,type=''){const el=$('#saveStatus');el.textContent=text;el.style.color=type==='err'?'#b42318':type==='ok'?'#087443':'#677287'}
 function safeClone(v){return JSON.parse(JSON.stringify(v))}
+function formatBytes(n){n=Number(n||0);if(!n)return'';const u=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return (i?n.toFixed(1):Math.round(n))+' '+u[i]}
+function fileToData(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=reject;r.readAsDataURL(file)})}
+function attachmentId(){return uid('att')}
+function toolId(){return uid('tool')}
+function normalizeToolPath(p){return String(p||'').trim().replace(/^\.\/toolbox\//,'').replace(/^toolbox\//,'').replace(/^\.\//,'')}
+
+const FALLBACK_TOOLS=[
+  {id:'tether-freeze-us',title:'Tether 冻结报告',path:'Tether冻结报告.html',category:'us'},
+  {id:'tether-freeze-de',title:'Tether 冻结报告 · 德国',path:'Tether冻结报告-德国.html',category:'de'},
+  {id:'tether-custody-us',title:'Tether 冻结资金保留',path:'Tether冻结资金保留.html',category:'us'},
+  {id:'tether-custody-de',title:'Tether 冻结资金保留 · 德国',path:'Tether冻结资金保留-德国.html',category:'de'},
+  {id:'risk-us',title:'网站风险查询',path:'网站风险查询.html',category:'us'},
+  {id:'risk-de',title:'网站风险查询 · 德国',path:'网站风险查询-德国.html',category:'de'},
+  {id:'investigation-us',title:'资金路径调查',path:'资金路径调查.html',category:'us'},
+  {id:'investigation-de',title:'资金路径调查 · 德国',path:'资金路径调查-德国.html',category:'de'},
+  {id:'lawyer-report-us',title:'资金路径调查律师报告',path:'资金路径调查律师报告.html',category:'us'},
+  {id:'lawyer-report-de',title:'资金路径调查律师报告 · 德国',path:'资金路径调查律师报告-德国.html',category:'de'},
+  {id:'assistant-report-us',title:'资金路径调查助理报告',path:'资金路径调查助理报告.html',category:'us'},
+  {id:'assistant-report-de',title:'资金路径调查助理报告 · 德国',path:'资金路径调查助理报告-德国.html',category:'de'},
+  {id:'docx-editor',title:'DOCX 文件编辑器',path:'DOCX文件编辑器.html',category:'other'},
+  {id:'email-editor',title:'邮件编辑器',path:'邮件编辑器.html',category:'other'},
+  {id:'onchain-us',title:'Onchain Wallet · Address Intelligence',path:'tools/Onchain钱包地址查询.html',category:'us'},
+  {id:'onchain-de',title:'Onchain Wallet · Adressanalyse',path:'tools/Onchain钱包地址查询-德国.html',category:'de'}
+];
+
+async function loadToolCatalog(){
+  let list=[...FALLBACK_TOOLS];
+  try{
+    const res=await fetch('./toolbox/tools/index.json',{cache:'no-store'});
+    if(res.ok){
+      const data=await res.json();
+      (data.tools||[]).forEach(t=>list.push({id:t.id||toolId(),title:t.title||t.name,path:t.path,category:t.category||'other'}));
+    }
+  }catch(_){}
+  const seen=new Set();
+  toolCatalog=list.filter(t=>{const k=String(t.path||'');if(!k||seen.has(k))return false;seen.add(k);return true});
+  $('#shortcutSelect').innerHTML='<option value="">选择 VIP 工具…</option>'+toolCatalog.map((t,i)=>'<option value="'+i+'">'+esc(t.title)+' · '+esc(t.path)+'</option>').join('');
+}
+function renderAttachments(){
+  const box=$('#attachmentList');
+  box.innerHTML=pendingAttachments.length?pendingAttachments.map((a,i)=>'<div class="asset-row"><div><div class="name">'+esc(a.name||a.url||'附件')+'</div><div class="meta">'+esc(a.type||'')+(a.size?' · '+formatBytes(a.size):'')+(a.url?' · '+esc(a.url):'')+'</div></div><button class="btn danger remove-att" data-i="'+i+'" type="button">删除</button></div>').join(''):'<div class="empty-mini">暂无附件</div>';
+  box.querySelectorAll('.remove-att').forEach(b=>b.onclick=()=>{pendingAttachments.splice(Number(b.dataset.i),1);renderAttachments()});
+}
+function renderToolLinks(){
+  const box=$('#shortcutList');
+  box.innerHTML=pendingToolLinks.length?pendingToolLinks.map((t,i)=>'<div class="asset-row"><div><div class="name">'+esc(t.title||t.path||'快捷方式')+'</div><div class="meta">'+esc(t.path||'')+'</div></div><button class="btn danger remove-tool" data-i="'+i+'" type="button">删除</button></div>').join(''):'<div class="empty-mini">暂无快捷方式</div>';
+  box.querySelectorAll('.remove-tool').forEach(b=>b.onclick=()=>{pendingToolLinks.splice(Number(b.dataset.i),1);renderToolLinks()});
+}
 
 async function load(){
   setStatus('正在同步…');
@@ -154,6 +232,10 @@ function openStep(id=''){
   $('#stepZh').value=s.contentZh||'';
   $('#stepForeign').value=s.contentForeign||'';
   $('#stepNote').value=s.note||'';
+  pendingAttachments=safeClone(Array.isArray(s.attachments)?s.attachments:[]);
+  pendingToolLinks=safeClone(Array.isArray(s.toolLinks)?s.toolLinks:[]);
+  renderAttachments();renderToolLinks();
+  $('#attachmentPath').value='';$('#shortcutTitle').value='';$('#shortcutPath').value='';$('#shortcutSelect').value='';
   $('#stepNoteMsg').hidden=true;
   $('#stepModal').hidden=false;
   setTimeout(()=>$('#stepTitle').focus(),30);
@@ -166,9 +248,9 @@ async function saveStep(){
   flow.steps=Array.isArray(flow.steps)?flow.steps:[];
   if(editingStepId){
     const idx=flow.steps.findIndex(x=>String(x.id)===String(editingStepId));
-    if(idx>=0)flow.steps[idx]={...flow.steps[idx],title,type,contentZh,contentForeign,note};
+    if(idx>=0)flow.steps[idx]={...flow.steps[idx],title,type,contentZh,contentForeign,note,attachments:safeClone(pendingAttachments),toolLinks:safeClone(pendingToolLinks)};
   }else{
-    flow.steps.push({id:uid(),title,type,contentZh,contentForeign,note,attachments:[],toolLinks:[]});
+    flow.steps.push({id:uid(),title,type,contentZh,contentForeign,note,attachments:safeClone(pendingAttachments),toolLinks:safeClone(pendingToolLinks)});
   }
   const ok=await persist('话术已保存');
   if(ok){closeStep();render()}
@@ -190,6 +272,33 @@ async function moveStep(id,delta){
 
 $('#addStep').onclick=()=>openStep('');
 $('#closeStepModal').onclick=closeStep;$('#cancelStep').onclick=closeStep;$('#saveStep').onclick=saveStep;
+
+$('#attachmentFile').addEventListener('change',async e=>{
+  const files=[...(e.target.files||[])]; if(!files.length)return;
+  for(const file of files){
+    if(file.size>8*1024*1024){alert(file.name+' 超过 8MB。较大的附件请放入 VIP 工具箱后使用“添加路径”。');continue}
+    try{
+      pendingAttachments.push({id:attachmentId(),name:file.name,type:file.type||'',size:file.size,data:await fileToData(file)});
+    }catch(err){alert('读取附件失败：'+file.name)}
+  }
+  e.target.value='';renderAttachments();
+});
+$('#addAttachmentPath').onclick=()=>{
+  const p=$('#attachmentPath').value.trim();if(!p)return;
+  const name=decodeURIComponent(p.split('/').pop().split('?')[0]||'附件');
+  pendingAttachments.push({id:attachmentId(),name,url:p});$('#attachmentPath').value='';renderAttachments();
+};
+$('#addShortcut').onclick=()=>{
+  const i=Number($('#shortcutSelect').value);if(!Number.isInteger(i)||!toolCatalog[i])return;
+  const t=toolCatalog[i];pendingToolLinks.push({id:toolId(),title:t.title,path:normalizeToolPath(t.path),category:t.category||'other'});
+  $('#shortcutSelect').value='';renderToolLinks();
+};
+$('#addCustomShortcut').onclick=()=>{
+  const title=$('#shortcutTitle').value.trim(),path=normalizeToolPath($('#shortcutPath').value);
+  if(!title||!path){alert('请填写快捷方式标题和路径。');return}
+  pendingToolLinks.push({id:toolId(),title,path,category:'other'});
+  $('#shortcutTitle').value='';$('#shortcutPath').value='';renderToolLinks();
+};
 $('#stepModal').onclick=e=>{if(e.target===$('#stepModal'))closeStep()};
 $('#reloadBtn').onclick=load;
 
@@ -212,7 +321,7 @@ $('#deleteFlow').onclick=async()=>{
   if(await persist('流程已删除'))render();
 };
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#stepModal').hidden)closeStep()});
-load();
+loadToolCatalog();load();
 </script>
 </body>
 </html>
