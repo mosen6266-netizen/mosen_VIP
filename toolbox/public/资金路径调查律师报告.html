@@ -211,6 +211,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background:rad
   .wc-pdf-signlabel{font-size:7px;text-transform:uppercase;letter-spacing:.08em;color:#81765f}
 </style>
 
+<script src="/mosen_VIP/vip-dialogs.js"></script>
 </head>
 <body>
 <div class="app">
@@ -716,7 +717,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background:rad
       saveBlob(bytes,`${data.caseNo} - ${safeTitle}.docx`);
     }catch(err){
       console.error(err);
-      alert('The editable Word report could not be generated. Please reopen this HTML in Chrome or Microsoft Edge and try again.');
+      vipAlert('The editable Word report could not be generated. Please reopen this HTML in Chrome or Microsoft Edge and try again.');
     }
   }
 
