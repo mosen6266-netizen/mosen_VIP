@@ -22,3 +22,4 @@ jobs:
           PY
       - name: Syntax check
         run: node --check /tmp/admin.mjs
+
