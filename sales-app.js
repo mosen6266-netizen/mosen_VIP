@@ -97,14 +97,27 @@ function matchesSalesFilters(r){
 }
 async function refreshMyCustomerCounts(){
   let stat=await readDashboardStat('rep:'+username);
-  if(!stat){
+  let shouldRecount=!stat;
+  try{
+    const newest=unwrap(await base44.entities.VIPCustomer.filter({rep_username:username},'-updated_date',1,0))[0];
+    const statTime=String(stat?.updated_at||stat?.updated_date||'');
+    const customerTime=String(newest?.updated_date||'');
+    if(customerTime&&customerTime>statTime)shouldRecount=true;
+  }catch(_){}
+  if(shouldRecount){
     const all=await fetchAllSalesCustomers({rep_username:username});
     const today=localDateKey();
-    stat={
+    const counted={
       active_customers:all.filter(x=>x.archived!==true).length,
       archived_customers:all.filter(x=>x.archived===true).length,
       today_active_customers:all.filter(x=>x.archived!==true&&localDateKey(x.created_date)===today).length
     };
+    stat={...(stat||{}),...counted};
+    try{
+      const payload={key:'rep:'+username,scope:'rep',rep_username:username,...counted,updated_at:new Date().toISOString(),version:Number(stat?.version||0)+1};
+      if(stat?.id)await base44.entities.VIPDashboardStats.update(stat.id,payload);
+      else await base44.entities.VIPDashboardStats.create(payload);
+    }catch(_){}
   }
   myCustomerTotal=Number(stat.active_customers||0);
   myArchivedTotal=Number(stat.archived_customers||0);
