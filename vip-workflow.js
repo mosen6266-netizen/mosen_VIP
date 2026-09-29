@@ -10,6 +10,7 @@
   var base44Promise=null;
   var cloudRows={};
   var cloudSaveTimers={};
+  var toolCatalog=null;
 
   function getBase44(){
     if(!base44Promise)base44Promise=import('./base44.js').then(function(m){return m.base44});
@@ -84,6 +85,26 @@
     if(!path)return '#';
     if(/^https?:/i.test(path))return path;
     return OLD_BASE+String(path).replace(/^\.\.\//,'').replace(/^\.\//,'');
+  }
+
+  async function loadLiveToolCatalog(force){
+    try{
+      if(window.VIPToolCatalog){
+        toolCatalog=await window.VIPToolCatalog.load(!!force);
+        return toolCatalog;
+      }
+    }catch(e){}
+    return toolCatalog;
+  }
+
+  function resolveToolLink(ref){
+    if(!ref)return null;
+    if(window.VIPToolCatalog&&toolCatalog){
+      var live=window.VIPToolCatalog.find(toolCatalog,ref);
+      if(live)return live;
+      return null;
+    }
+    return {id:ref.toolId||ref.id||'',title:ref.title||ref.path||'快捷方式',path:ref.path||'',category:ref.category||''};
   }
 
   function isImageAttachment(a){
@@ -415,7 +436,8 @@
         var done=st.done.has(String(step.id));
         var isNext=nextStep&&String(nextStep.id)===String(step.id);
         var attachments=Array.isArray(step.attachments)?step.attachments:[];
-        var tools=Array.isArray(step.toolLinks)?step.toolLinks:[];
+        var rawTools=Array.isArray(step.toolLinks)?step.toolLinks:[];
+        var tools=rawTools.map(resolveToolLink).filter(Boolean);
         html+='<article class="vip-flow-step '+(done?'done ':'')+(isNext?'next':'')+'" data-vip-step-id="'+esc(step.id)+'">'+
           '<div class="vip-flow-step-head">'+
             '<input class="vip-flow-check" type="checkbox" '+(done?'checked':'')+' data-vip-check="'+esc(step.id)+'" title="已发送">'+
@@ -525,6 +547,7 @@
     var overlay=createShell(customerId,customerName);
     try{
       var bundle=await loadBundle(true);
+      await loadLiveToolCatalog(true);
       if(!document.body.contains(overlay))return;
       var progress=await loadCloudProgress(customerId);
       var activeId=chooseInitialFlow(bundle,progress);
@@ -555,6 +578,7 @@
     container.innerHTML='<section class="vip-flow-inline-shell"><div class="vip-flow-inline-head"><div><strong>维权流程</strong><br><span>'+esc(customerName||'未命名客户')+' · 当前客户独立进度</span></div></div><div class="vip-flow-inline-body"><aside class="vip-flow-sidebar" data-vip-sidebar><div class="vip-flow-empty">正在读取流程…</div></aside><main class="vip-flow-main" data-vip-main><div class="vip-flow-empty">正在读取流程内容…</div></main></div></section>';
     try{
       var bundle=await loadBundle(true);
+      await loadLiveToolCatalog(true);
       var progress=await loadCloudProgress(customerId);
       var activeId=chooseInitialFlow(bundle,progress);
       progress.activeFlowId=activeId;
