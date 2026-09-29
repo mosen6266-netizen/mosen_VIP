@@ -22,17 +22,21 @@ def ignore(directory,names):
 
 shutil.copytree(ROOT,OUT,ignore=ignore)
 
-# Rebuild the historical /toolbox/public aliases from the canonical toolbox files.
-public_source=ROOT/"toolbox"/"public"
+# Rebuild historical /toolbox/public aliases from canonical toolbox files.
+# The source repository keeps only one canonical copy of each file.
+public_manifest=ROOT/"toolbox"/"public-aliases.json"
 public_out=OUT/"toolbox"/"public"
 public_out.mkdir(parents=True,exist_ok=True)
-if public_source.exists():
-    for old in public_source.iterdir():
-        if not old.is_file():
-            continue
-        canonical=ROOT/"toolbox"/old.name
+if public_manifest.exists():
+    try:
+        alias_doc=json.loads(public_manifest.read_text("utf-8"))
+        aliases=alias_doc.get("aliases",[]) if isinstance(alias_doc,dict) else []
+    except Exception:
+        aliases=[]
+    for name in aliases:
+        canonical=ROOT/"toolbox"/str(name)
         if canonical.exists() and canonical.is_file():
-            shutil.copy2(canonical,public_out/old.name)
+            shutil.copy2(canonical,public_out/str(name))
 
 def short_hash(path:Path)->str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
