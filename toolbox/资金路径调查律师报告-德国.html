@@ -211,6 +211,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background:rad
   .wc-pdf-signlabel{font-size:7px;text-transform:uppercase;letter-spacing:.08em;color:#81765f}
 </style>
 
+<script src="/mosen_VIP/vip-dialogs.js"></script>
 </head>
 <body>
 <div class="app">
@@ -716,7 +717,7 @@ body:before{content:"";position:fixed;inset:0;pointer-events:none;background:rad
       saveBlob(bytes,`${data.caseNo} - ${safeTitle}.docx`);
     }catch(err){
       console.error(err);
-      alert('Der bearbeitbare Word-Bericht konnte nicht erstellt werden. Bitte öffnen Sie diese HTML-Datei erneut in Chrome oder Microsoft Edge und versuchen Sie es noch einmal.');
+      vipAlert('Der bearbeitbare Word-Bericht konnte nicht erstellt werden. Bitte öffnen Sie diese HTML-Datei erneut in Chrome oder Microsoft Edge und versuchen Sie es noch einmal.');
     }
   }
 
