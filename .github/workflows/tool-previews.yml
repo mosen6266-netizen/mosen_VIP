@@ -1,0 +1,48 @@
+name: Generate tool previews
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "toolbox/**/*.html"
+      - "toolbox/tool-catalog.json"
+      - "scripts/generate-tool-previews.mjs"
+      - ".github/workflows/tool-previews.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tool-previews
+  cancel-in-progress: true
+
+jobs:
+  previews:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install chromium --with-deps
+      - name: Start local site
+        run: |
+          python3 -m http.server 8000 >/tmp/mosen-vip-preview-http.log 2>&1 &
+          sleep 2
+      - name: Generate static previews
+        run: node scripts/generate-tool-previews.mjs
+      - name: Commit changed previews
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add toolbox/previews
+          if git diff --cached --quiet; then
+            echo "No preview changes"
+          else
+            git commit -m "Update static tool previews"
+            git push
+          fi
