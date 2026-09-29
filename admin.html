@@ -659,7 +659,7 @@ const FULL_BACKUP_VERSION=4;
 const VIP_REPO_OWNER='mosen6266-netizen';
 const VIP_REPO_NAME='mosen_VIP';
 const VIP_REPO_BRANCH='main';
-const BACKUP_ENTITY_NAMES=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPActivityLog','VIPWorkflowDefinition','VIPWorkflowProgress'];
+const BACKUP_ENTITY_NAMES=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPActivityLog','VIPWorkflowDefinition','VIPWorkflowProgress','VIPWorkflowFlowProgress','VIPToolCatalog','VIPDashboardStats'];
 
 async function getAllEntityRecords(entityName){
   const all=[];let skip=0;
@@ -689,7 +689,10 @@ async function collectBackupEntities(){
     VIPCustomer:rows[3].map(backupRow),
     VIPActivityLog:rows[4].map(backupRow),
     VIPWorkflowDefinition:rows[5].map(backupRow),
-    VIPWorkflowProgress:rows[6].map(backupRow)
+    VIPWorkflowProgress:rows[6].map(backupRow),
+    VIPWorkflowFlowProgress:rows[7].map(backupRow),
+    VIPToolCatalog:rows[8].map(backupRow),
+    VIPDashboardStats:rows[9].map(backupRow)
   };
 }
 
@@ -702,6 +705,9 @@ function backupCounts(entities,repository){
     activity_logs:(entities.VIPActivityLog||entities.ActivityLog||[]).length,
     workflow_definitions:(entities.VIPWorkflowDefinition||[]).length,
     workflow_progress:(entities.VIPWorkflowProgress||[]).length,
+    workflow_flow_progress:(entities.VIPWorkflowFlowProgress||[]).length,
+    tool_catalog:(entities.VIPToolCatalog||[]).length,
+    dashboard_stats:(entities.VIPDashboardStats||[]).length,
     toolbox_files:(repository?.toolbox_files||[]).length
   };
 }
@@ -837,7 +843,10 @@ function normalizeLegacyEntities(e){
     VIPCustomer:e.Customer||[],
     VIPActivityLog:e.ActivityLog||[],
     VIPWorkflowDefinition:e.VIPWorkflowDefinition||[],
-    VIPWorkflowProgress:e.VIPWorkflowProgress||[]
+    VIPWorkflowProgress:e.VIPWorkflowProgress||[],
+    VIPWorkflowFlowProgress:e.VIPWorkflowFlowProgress||[],
+    VIPToolCatalog:e.VIPToolCatalog||[],
+    VIPDashboardStats:e.VIPDashboardStats||[]
   };
 }
 
@@ -932,6 +941,17 @@ async function restoreEntities(entities){
     if(clean.customer_id&&customerMap[String(clean.customer_id)])clean.customer_id=customerMap[String(clean.customer_id)];
     await base44.entities.VIPWorkflowProgress.create(clean);
   }
+
+  for(const row of e.VIPWorkflowFlowProgress||[]){
+    const clean=withoutOldId(row);
+    const oldCustomer=String(clean.customer_id||'');
+    if(oldCustomer&&customerMap[oldCustomer])clean.customer_id=customerMap[oldCustomer];
+    clean.unique_key=String(clean.customer_id||'')+'::'+String(clean.flow_id||'');
+    await base44.entities.VIPWorkflowFlowProgress.create(clean);
+  }
+
+  for(const row of e.VIPToolCatalog||[])await base44.entities.VIPToolCatalog.create(withoutOldId(row));
+  for(const row of e.VIPDashboardStats||[])await base44.entities.VIPDashboardStats.create(withoutOldId(row));
 }
 
 async function githubWrite(path,token,options={}){
@@ -1045,7 +1065,7 @@ async function importFullBackup(file){
     downloadBackupObject(safety,'mosen_VIP-恢复前安全备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json');
 
     showMessage(note,'正在清理并恢复全部云端数据，请不要关闭页面…','warn');
-    for(const name of ['VIPActivityLog','VIPWorkflowProgress','VIPWorkflowDefinition','VIPCustomer','VIPProgressStage','VIPFormField','VIPSalesRep']){
+    for(const name of ['VIPActivityLog','VIPWorkflowFlowProgress','VIPWorkflowProgress','VIPToolCatalog','VIPDashboardStats','VIPWorkflowDefinition','VIPCustomer','VIPProgressStage','VIPFormField','VIPSalesRep']){
       await wipeEntity(name);
     }
     await restoreEntities(entities);
