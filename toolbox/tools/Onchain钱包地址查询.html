@@ -125,6 +125,7 @@
     .select-menu,.context-menu{max-width:calc(100vw - 16px)}
   }
 </style>
+<script src="/mosen_VIP/vip-dialogs.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -628,9 +629,9 @@ function editBalance(symbol){
 function saveBalanceEdit(){
   if(!currentRecord) return;
   const raw=$('balanceInput').value.trim().replaceAll(',','');
-  if(raw===''||!/^\d+(?:\.\d+)?$/.test(raw)){alert('Enter a valid non-negative balance.');return}
+  if(raw===''||!/^\d+(?:\.\d+)?$/.test(raw)){vipAlert('Enter a valid non-negative balance.');return}
   const n=Number(raw);
-  if(!Number.isFinite(n)||n<0){alert('Enter a valid non-negative balance.');return}
+  if(!Number.isFinite(n)||n<0){vipAlert('Enter a valid non-negative balance.');return}
   ensureBalances(currentRecord);
   currentRecord.balances[editingBalanceSymbol]=editingBalanceSymbol==='ETH'?n.toFixed(6):n.toFixed(2);
   if(currentRecord.asset===editingBalanceSymbol) currentRecord.balance=currentRecord.balances[editingBalanceSymbol];
@@ -651,9 +652,9 @@ function editTxFee(ev,index){
 function saveTxFeeEdit(){
   if(!currentRecord||editingFeeTxIndex<0||!currentRecord.transactions?.[editingFeeTxIndex]) return;
   const raw=$('feeInput').value.trim().replace(/\s*ETH\s*$/i,'').trim().replaceAll(',','');
-  if(!/^\d+(?:\.\d+)?$/.test(raw)){alert('Enter a valid ETH network fee.');return}
+  if(!/^\d+(?:\.\d+)?$/.test(raw)){vipAlert('Enter a valid ETH network fee.');return}
   const n=Number(raw);
-  if(!Number.isFinite(n)||n<0){alert('Enter a valid ETH network fee.');return}
+  if(!Number.isFinite(n)||n<0){vipAlert('Enter a valid ETH network fee.');return}
   if(!ensureCurrentEditable()) return;
   currentRecord.transactions[editingFeeTxIndex].fee=raw+' ETH';
   db[norm(currentRecord.address)]=currentRecord;
@@ -835,7 +836,7 @@ function saveTxRow(){
   if(!currentRecord)return;
   const dir=$('txDirection').value;
   const tx={time:normalizeDateText($('txTime').value.trim()),direction:dir,asset:$('txAsset').value.trim()||currentRecord.asset||'USDT',amount:$('txAmount').value.trim(),counterparty:isJudicialDirection(dir)?'':$('txCounterparty').value.trim(),status:$('txStatus').value.trim(),hash:$('txHash').value.trim()||currentRecord.address,block:$('txBlock').value.trim(),fee:$('txFee').value.trim()};
-  if(!tx.time||!tx.amount){alert('Date/time and amount are required.');return}
+  if(!tx.time||!tx.amount){vipAlert('Date/time and amount are required.');return}
   if(!Array.isArray(currentRecord.transactions))currentRecord.transactions=[];
   if(txEditMode==='add') currentRecord.transactions.push(tx); else if(selectedTxIndex>=0) currentRecord.transactions[selectedTxIndex]=tx;
   currentRecord.chain='Ethereum';
@@ -898,17 +899,17 @@ function clearForm(){
   $('fStatus').value='Under Review';$('fRisk').value='Low';
 }
 function saveRecord(){
-  const address=$('fAddress').value.trim();if(!address){alert('Wallet address is required.');return}
-  let tx=[];try{tx=$('fTx').value.trim()?JSON.parse($('fTx').value):[];if(!Array.isArray(tx))throw 0}catch(e){alert('Transfer Records must be a valid JSON array.');return}
+  const address=$('fAddress').value.trim();if(!address){vipAlert('Wallet address is required.');return}
+  let tx=[];try{tx=$('fTx').value.trim()?JSON.parse($('fTx').value):[];if(!Array.isArray(tx))throw 0}catch(e){vipAlert('Transfer Records must be a valid JSON array.');return}
   const r={address,chain:'Ethereum',status:$('fStatus').value,asset:$('fAsset').value.trim()||'USDT',balance:$('fBalance').value.trim()||'0.00',risk:$('fRisk').value,label:$('fLabel').value.trim(),type:$('fType').value.trim(),kyc:$('fKyc').value.trim(),firstActivity:normalizeDateText($('fFirst').value.trim()),lastActivity:normalizeDateText($('fLast').value.trim()),freezeStatus:$('fFreeze').value.trim(),totalIn:$('fIn').value.trim()||'0.00',totalOut:$('fOut').value.trim()||'0.00',counterparties:$('fCounterparties').value.trim()||'0',note:$('fNote').value.trim(),transactions:tx.map(t=>({...t,time:normalizeDateText(t.time)}))};
   r.balances=buildBalances(r.balance,address);
   r.note=OFFICIAL_KYC_NOTE;
   recomputeDerived(r);
   db[norm(address)]=r;saveDB();$('addressInput').value=address;manager.close();queryAddress();
 }
-function deleteRecord(){
-  const address=$('fAddress').value.trim();if(!address||!db[norm(address)]){alert('This address is not in the Internal Address Database.');return}
-  if(!confirm('Delete this address record from the Internal Address Database?')) return;
+async function deleteRecord(){
+  const address=$('fAddress').value.trim();if(!address||!db[norm(address)]){vipAlert('This address is not in the Internal Address Database.');return}
+  if(!await vipConfirm('Delete this address record from the Internal Address Database?',{title:'Delete address record',confirmText:'Delete',danger:true})) return;
   delete db[norm(address)];saveDB();clearForm();manager.close();$('result').style.display='none';setMessage('The address record was deleted from the Internal Address Database.','ok');
 }
 function copyAddress(){if(currentRecord) navigator.clipboard.writeText(currentRecord.address)}
@@ -1285,13 +1286,13 @@ function buildReportHtml(record){
 </html>`;
 }
 function generateReport(){
-  if(!currentRecord){alert('Search an address first.');return}
+  if(!currentRecord){vipAlert('Search an address first.');return}
   const record=JSON.parse(JSON.stringify(currentRecord));
   ensureBalances(record);
   recomputeDerived(record);
   record.note=OFFICIAL_KYC_NOTE;
   const popup=window.open('','_blank');
-  if(!popup){alert('Unable to open the report window. Please allow pop-ups and try again.');return}
+  if(!popup){vipAlert('Unable to open the report window. Please allow pop-ups and try again.');return}
   popup.document.open();
   popup.document.write(buildReportHtml(record));
   popup.document.close();
@@ -1301,7 +1302,7 @@ function generateReport(){
 }
 
 function importDB(ev){
-  const f=ev.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw 0;db=translateLegacyDeep(obj);saveDB();setMessage(`Database import complete. ${Object.keys(db).length} address ${Object.keys(db).length===1?'record':'records'} loaded.`,'ok')}catch(e){alert('Import failed: the JSON database format is invalid.')}};reader.readAsText(f);ev.target.value='';
+  const f=ev.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw 0;db=translateLegacyDeep(obj);saveDB();setMessage(`Database import complete. ${Object.keys(db).length} address ${Object.keys(db).length===1?'record':'records'} loaded.`,'ok')}catch(e){vipAlert('Import failed: the JSON database format is invalid.')}};reader.readAsText(f);ev.target.value='';
 }
 updateCount();
 </script>
