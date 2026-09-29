@@ -160,16 +160,20 @@
 
   function installButtons(root){
     (root||document).querySelectorAll('.customer-progress-row').forEach(function(row){
-      if(row.querySelector('.vip-flow-btn'))return;
       var id=findCustomerId(row);
       if(!id)return;
+      var pct=overallCompleted(id);
+      var existing=row.querySelector('.vip-flow-btn');
+      if(existing){
+        existing.innerHTML='维权流程'+(pct?'<span class="vip-flow-dot">'+pct+'%</span>':'');
+        return;
+      }
       var actionCell=row.querySelector('td[data-label="操作"] .row')||row.querySelector('td:last-child .row');
       if(!actionCell)return;
       var btn=document.createElement('button');
       btn.type='button';
       btn.className='btn soft vip-flow-btn';
       btn.dataset.id=id;
-      var pct=overallCompleted(id);
       btn.innerHTML='维权流程'+(pct?'<span class="vip-flow-dot">'+pct+'%</span>':'');
       btn.addEventListener('click',function(e){
         e.preventDefault();e.stopPropagation();
