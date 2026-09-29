@@ -142,16 +142,17 @@ a{color:inherit}.topbar{height:66px;background:rgba(255,255,255,.94);backdrop-fi
 .fixed-customer-table{overflow:visible}
 .fixed-customer-table table{min-width:0;table-layout:fixed}
 .fixed-customer-table th,.fixed-customer-table td{font-size:clamp(12px,.78vw,14px);padding:12px 10px;overflow-wrap:anywhere}
-.fixed-customer-table th:nth-child(1){width:12%}
-.fixed-customer-table th:nth-child(2){width:13%}
-.fixed-customer-table th:nth-child(3){width:12%}
-.fixed-customer-table th:nth-child(4){width:16%}
-.fixed-customer-table th:nth-child(5){width:11%}
-.fixed-customer-table th:nth-child(6){width:14%}
-.fixed-customer-table th:nth-child(7){width:14%}
-.fixed-customer-table th:nth-child(8){width:170px}
-.fixed-customer-table .btn{padding:9px 11px;font-size:12px}
-.fixed-customer-table .row.nowrap{gap:6px}
+.fixed-customer-table th:nth-child(1){width:11%}
+.fixed-customer-table th:nth-child(2){width:12%}
+.fixed-customer-table th:nth-child(3){width:10%}
+.fixed-customer-table th:nth-child(4){width:15%}
+.fixed-customer-table th:nth-child(5){width:10%}
+.fixed-customer-table th:nth-child(6){width:13%}
+.fixed-customer-table th:nth-child(7){width:13%}
+.fixed-customer-table th:nth-child(8){width:16%}
+.fixed-customer-table td[data-label="操作"]{min-width:0}
+.fixed-customer-table td[data-label="操作"] .row.nowrap{width:100%;gap:5px;flex-wrap:nowrap;justify-content:flex-start}
+.fixed-customer-table td[data-label="操作"] .btn{padding:8px 9px;font-size:12px;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;flex:0 0 auto}
 .fixed-customer-table .eye-btn{width:34px;height:34px;flex:0 0 34px}
 
 /* Laptop and smaller: each customer becomes a responsive information bubble */
