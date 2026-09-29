@@ -37,6 +37,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}
 @media(max-width:1040px){.app{grid-template-columns:320px minmax(0,1fr)}.summary{grid-template-columns:1fr 1fr}.list-head,.row{grid-template-columns:45px 145px minmax(230px,1fr) 150px}.main{padding:20px}}
 @media(max-width:760px){.app{display:block}.sidebar{position:relative;height:auto}.template-list{max-height:260px;overflow:auto}.main{padding:15px}.topbar{display:block}.top-actions{justify-content:flex-start;margin-top:15px}.summary{grid-template-columns:1fr 1fr}.steps{grid-template-columns:1fr}.list-head{display:none}.row{grid-template-columns:42px minmax(0,1fr);gap:9px}.row>div:nth-child(3),.row>div:nth-child(4){grid-column:2}.rows{max-height:none}.summary-box:first-child{grid-column:1/-1}}
 </style>
+<script src="/mosen_VIP/vip-dialogs.js"></script>
 </head>
 <body>
 <div class="app">
@@ -198,7 +199,7 @@ async function importFiles(files){
   }catch(err){console.error(err);toast('保存模板失败：'+(err.message||err),'error')}finally{setBusy(false)}
 }
 async function removeTemplate(t){
-  if(!confirm(`确定删除模板“${t.name}”吗？\n删除后无法从本编辑器恢复。`))return;
+  if(!await vipConfirm(`确定删除模板“${t.name}”吗？\n删除后无法从本编辑器恢复。`,{title:"删除模板",confirmText:"删除",danger:true}))return;
   await dbDelete(t.id);if(state.current?.id===t.id){state.current=null;state.occurrences=[];showWelcome()}
   await refreshTemplates();toast('模板已删除');
 }
@@ -381,7 +382,7 @@ function applyRecord(p,record,replacement){
   const segs=[...segMap.values()];if(!segs.length)return false;segs.forEach((seg,idx)=>{const raw=seg.node.textContent||'';seg.node.textContent=raw.slice(0,seg.start)+(idx===0?replacement:'')+raw.slice(seg.end);if(/^\s|\s$/.test(seg.node.textContent||''))seg.node.setAttribute('xml:space','preserve')});applyFormatProfile(segs[0].run,record.profile);return true;
 }
 async function exportDocx(filename){
-  if(!state.current||state.busy)return;const empty=state.occurrences.filter(o=>!o.replacement.trim()).length;if(empty&&!confirm(`还有 ${empty} 处中文没有填写英文。\n继续输出时，这些位置会保留原中文。`))return;
+  if(!state.current||state.busy)return;const empty=state.occurrences.filter(o=>!o.replacement.trim()).length;if(empty&&!await vipConfirm(`还有 ${empty} 处中文没有填写英文。\n继续输出时，这些位置会保留原中文。`,{title:"确认输出",confirmText:"继续输出"}))return;
   setBusy(true,'正在按识别到的标题/正文格式生成 DOCX…');
   try{
     await saveDraft();const result=await scanBuffer(state.current.buffer),byPart=new Map();state.occurrences.forEach((ui,i)=>{const rec=result.occurrences[i];if(!rec)return;const arr=byPart.get(rec.path)||[];arr.push({rec,replacement:ui.replacement.trim()?ui.replacement:ui.originalText});byPart.set(rec.path,arr)});
