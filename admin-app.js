@@ -1001,6 +1001,7 @@ async function importFullBackup(file){
       await wipeEntity(name);
     }
     await restoreEntities(entities);
+    try{await reconcileDashboardStats(base44)}catch(_){}
 
     if(info.isV4){
       await restoreToolboxSnapshot(raw.repository,token,note);
@@ -1023,7 +1024,7 @@ async function importFullBackup(file){
 async function ensureAdminSearchIndex(){
   const all=[];let skip=0;
   while(true){
-    const batch=unwrap(await base44.entities.VIPCustomer.list('-created_date',200,skip));
+    const batch=unwrap(await base44.entities.VIPCustomer.list({sort:'-created_date',limit:200,skip}));
     all.push(...batch);if(batch.length<200)break;skip+=200;if(skip>10000)break;
   }
   const missing=all.filter(r=>String(r.search_text||'')!==buildCustomerSearchText(r.rep_username,r.data||{}));
@@ -1731,6 +1732,7 @@ async function importV5Backup(file){
     }
     const workflowAssetUrlMap=await restoreWorkflowAssetsFromZip(zip,manifest,note);
     await restoreEntities(entities,workflowAssetUrlMap);
+    try{await reconcileDashboardStats(base44)}catch(_){}
 
     await restoreRepositoryFromZip(zip,manifest,token,note);
 
@@ -1798,33 +1800,37 @@ async function fetchCustomerPage(){
   if(!customers.length&&customerPage>1){customerPage--;return fetchCustomerPage()}
 }
 async function refreshCustomerCounts(){
-  const verifyKey='mVIP_counts_verified_v2';
+  const verifyKey='mVIP_counts_verified_v3';
   if(!sessionStorage.getItem(verifyKey)){
     try{await reconcileDashboardStats(base44);sessionStorage.setItem(verifyKey,'1')}catch(_){}
   }
-  let rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'key',limit:500}));
-  let global=rows.find(x=>x.key==='global');
+  let rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'-updated_date',limit:500}));
+  const latestByKey=new Map();
+  for(const row of rows){const key=String(row.key||'');if(key&&!latestByKey.has(key))latestByKey.set(key,row)}
+  let global=latestByKey.get('global');
   try{
     const newest=unwrap(await base44.entities.VIPCustomer.list({sort:'-updated_date',limit:1}))[0];
     const statTime=String(global?.updated_at||global?.updated_date||'');
     const customerTime=String(newest?.updated_date||'');
     if(!global||(customerTime&&customerTime>statTime)){
       await reconcileDashboardStats(base44);
-      rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'key',limit:500}));
-      global=rows.find(x=>x.key==='global');
+      rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'-updated_date',limit:500}));
+      latestByKey.clear();
+      for(const row of rows){const key=String(row.key||'');if(key&&!latestByKey.has(key))latestByKey.set(key,row)}
+      global=latestByKey.get('global');
     }
   }catch(_){}
   if(global){
     totalCustomerCount=Number(global.active_customers||0);
     totalArchivedCount=Number(global.archived_customers||0);
     customerCountByRep={};archivedCountByRep={};
-    rows.filter(x=>x.scope==='rep').forEach(x=>{
+    [...latestByKey.values()].filter(x=>x.scope==='rep').forEach(x=>{
       customerCountByRep[String(x.rep_username||'')]=Number(x.active_customers||0);
       archivedCountByRep[String(x.rep_username||'')]=Number(x.archived_customers||0);
     });
   }else{
     const all=[];let skip=0;
-    while(true){const batch=unwrap(await base44.entities.VIPCustomer.list('-created_date',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500}
+    while(true){const batch=unwrap(await base44.entities.VIPCustomer.list({sort:'-created_date',limit:500,skip}));all.push(...batch);if(batch.length<500)break;skip+=500}
     let active=0,archived=0,counts={},archiveCounts={};
     for(const row of all){if(row.duplicate_record===true)continue;const key=String(row.rep_username||'');if(row.archived===true){archived++;archiveCounts[key]=(archiveCounts[key]||0)+1}else{active++;counts[key]=(counts[key]||0)+1}}
     totalCustomerCount=active;totalArchivedCount=archived;customerCountByRep=counts;archivedCountByRep=archiveCounts;
