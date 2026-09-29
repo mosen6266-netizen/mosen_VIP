@@ -18,7 +18,7 @@ async function boot(){
       let fieldTimer=0,progressTimer=0,customerTimer=0,repTimer=0;
       base44.entities.VIPFormField.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(fieldTimer);fieldTimer=setTimeout(()=>loadFields(),450)});
       base44.entities.VIPProgressStage.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(progressTimer);progressTimer=setTimeout(()=>{loadProgress();loadCustomers()},500)});
-      base44.entities.VIPCustomer.subscribe(evt=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(customerTimer);customerTimer=setTimeout(()=>smartCustomerSubscription({event:evt,customers,render:renderCustomers,load:()=>loadCustomers(),refreshCounts:scheduleMyCustomerCountRefresh,matches:r=>String(r.rep_username||'')===username&&Boolean(r.archived)===(customerMode==='archive')&&matchesSalesFilters(r)}),650)});
+      base44.entities.VIPCustomer.subscribe(evt=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(customerTimer);customerTimer=setTimeout(()=>smartCustomerSubscription({event:evt,customers,render:renderCustomers,load:()=>loadCustomers(),refreshCounts:scheduleMyCustomerCountRefresh,matches:r=>r?.duplicate_record!==true&&String(r.rep_username||'')===username&&Boolean(r.archived)===(customerMode==='archive')&&matchesSalesFilters(r)}),650)});
       base44.entities.VIPDashboardStats.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;scheduleMyCustomerCountRefresh()});
       base44.entities.VIPSalesRep.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(repTimer);repTimer=setTimeout(()=>verifyRep(),500)});
     }catch(_){}
@@ -77,12 +77,13 @@ async function fetchAllSalesCustomers(query){
   return all;
 }
 function salesBaseQuery(){
-  return {rep_username:username,archived:customerMode==='archive'};
+  return {rep_username:username,archived:customerMode==='archive',duplicate_record:{$ne:true}};
 }
 function salesFilterActive(){
   return !!((document.getElementById('search')?.value||'').trim()||(document.getElementById('salesStarFilter')?.value||'')||(document.getElementById('salesProgressFilter')?.value||'')||(document.getElementById('salesCountryFilter')?.value||'').trim());
 }
 function matchesSalesFilters(r){
+  if(r?.duplicate_record===true)return false;
   const q=(document.getElementById('search')?.value||'').trim().toLowerCase();
   const star=document.getElementById('salesStarFilter')?.value||'';
   const progress=document.getElementById('salesProgressFilter')?.value||'';
@@ -97,15 +98,16 @@ function matchesSalesFilters(r){
 }
 async function refreshMyCustomerCounts(){
   let stat=await readDashboardStat('rep:'+username);
-  let shouldRecount=!stat;
+  const verifyKey='mVIP_rep_counts_verified_v2_'+username;
+  let shouldRecount=!stat||!sessionStorage.getItem(verifyKey);
   try{
-    const newest=unwrap(await base44.entities.VIPCustomer.filter({rep_username:username},'-updated_date',1,0))[0];
+    const newest=unwrap(await base44.entities.VIPCustomer.filter({rep_username:username,duplicate_record:{$ne:true}},'-updated_date',1,0))[0];
     const statTime=String(stat?.updated_at||stat?.updated_date||'');
     const customerTime=String(newest?.updated_date||'');
     if(customerTime&&customerTime>statTime)shouldRecount=true;
   }catch(_){}
   if(shouldRecount){
-    const all=await fetchAllSalesCustomers({rep_username:username});
+    const all=await fetchAllSalesCustomers({rep_username:username,duplicate_record:{$ne:true}});
     const today=localDateKey();
     const counted={
       active_customers:all.filter(x=>x.archived!==true).length,
@@ -113,6 +115,7 @@ async function refreshMyCustomerCounts(){
       today_active_customers:all.filter(x=>x.archived!==true&&localDateKey(x.created_date)===today).length
     };
     stat={...(stat||{}),...counted};
+    sessionStorage.setItem(verifyKey,'1');
     try{
       const payload={key:'rep:'+username,scope:'rep',rep_username:username,...counted,updated_at:new Date().toISOString(),version:Number(stat?.version||0)+1};
       if(stat?.id)await base44.entities.VIPDashboardStats.update(stat.id,payload);
