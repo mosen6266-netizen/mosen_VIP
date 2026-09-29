@@ -8,6 +8,78 @@ export function esc(value = '') {
   return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[ch]));
 }
 
+export function localDateKey(value = new Date()) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value || '').slice(0,10);
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+
+export function buildCustomerSearchText(repUsername = '', data = {}) {
+  const values=[repUsername];
+  const walk=v=>{
+    if(v==null)return;
+    if(Array.isArray(v)){v.forEach(walk);return}
+    if(typeof v==='object'){Object.values(v).forEach(walk);return}
+    values.push(String(v));
+  };
+  walk(data);
+  return values.join(' ').replace(/\s+/g,' ').trim().toLowerCase();
+}
+
+const statQueues=new Map();
+export async function readDashboardStat(key){
+  const rows=await base44.entities.VIPDashboardStats.filter({key:String(key)},'-updated_date',1,0);
+  return Array.isArray(rows)?rows[0]:(rows?.items||[])[0]||null;
+}
+
+export function adjustDashboardStat(key,deltas={},meta={}){
+  const k=String(key);
+  const prev=statQueues.get(k)||Promise.resolve();
+  const next=prev.catch(()=>{}).then(async()=>{
+    let row=await readDashboardStat(k);
+    const base=row||{
+      key:k,
+      scope:meta.scope|| (k==='global'?'global':'rep'),
+      rep_username:meta.rep_username|| (k.startsWith('rep:')?k.slice(4):''),
+      active_customers:0,archived_customers:0,today_active_customers:0,version:0
+    };
+    const payload={
+      key:k,
+      scope:base.scope||meta.scope||'rep',
+      rep_username:base.rep_username||meta.rep_username||'',
+      active_customers:Math.max(0,Number(base.active_customers||0)+Number(deltas.active_customers||0)),
+      archived_customers:Math.max(0,Number(base.archived_customers||0)+Number(deltas.archived_customers||0)),
+      today_active_customers:Math.max(0,Number(base.today_active_customers||0)+Number(deltas.today_active_customers||0)),
+      updated_at:new Date().toISOString(),
+      version:Number(base.version||0)+1
+    };
+    if(row)await base44.entities.VIPDashboardStats.update(row.id,payload);
+    else row=await base44.entities.VIPDashboardStats.create(payload);
+    return {...base,...payload,id:row?.id||base.id};
+  }).finally(()=>{if(statQueues.get(k)===next)statQueues.delete(k)});
+  statQueues.set(k,next);
+  return next;
+}
+
+export async function createEntityBatch(entityHandler,records,concurrency=6){
+  const rows=(records||[]).filter(Boolean);
+  if(!rows.length)return [];
+  if(typeof entityHandler.bulkCreate==='function'){
+    try{return await entityHandler.bulkCreate(rows)}catch(_){}
+  }
+  const result=new Array(rows.length);
+  let index=0;
+  async function worker(){
+    while(true){
+      const i=index++;if(i>=rows.length)return;
+      result[i]=await entityHandler.create(rows[i]);
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(concurrency,rows.length)},()=>worker()));
+  return result;
+}
+
 export function showMessage(el, text, type = '') {
   if (!el) return;
   el.textContent = text;
