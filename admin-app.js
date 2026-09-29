@@ -446,7 +446,10 @@ async function loadLogs(reset=false){
   if(reset)logPage=1;
   try{
     const skip=(logPage-1)*LOG_PAGE_SIZE;
-    let rows=unwrap(await base44.entities.VIPActivityLog.filter(logServerQuery(),'-event_time',LOG_PAGE_SIZE+1,skip));
+    const selectedDate=document.getElementById('logDate')?.value||localDateKey();
+    const archiveCutoff=new Date(Date.now()-90*86400000).toISOString().slice(0,10);
+    const logEntity=selectedDate<archiveCutoff?base44.entities.VIPActivityLogArchive:base44.entities.VIPActivityLog;
+    let rows=unwrap(await logEntity.filter(logServerQuery(),'-event_time',LOG_PAGE_SIZE+1,skip));
     logHasNext=rows.length>LOG_PAGE_SIZE;
     activityLogs=rows.slice(0,LOG_PAGE_SIZE);
     document.getElementById('sidebarLogCount').textContent=logHasNext?(LOG_PAGE_SIZE+'+'):String(activityLogs.length);
@@ -460,7 +463,7 @@ const FULL_BACKUP_VERSION=4;
 const VIP_REPO_OWNER='mosen6266-netizen';
 const VIP_REPO_NAME='mosen_VIP';
 const VIP_REPO_BRANCH='main';
-const BACKUP_ENTITY_NAMES=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPActivityLog','VIPWorkflowDefinition','VIPWorkflowProgress','VIPWorkflowFlowProgress','VIPToolCatalog','VIPDashboardStats','VIPSystemStats'];
+const BACKUP_ENTITY_NAMES=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPActivityLog','VIPWorkflowDefinition','VIPWorkflowProgress','VIPWorkflowFlowProgress','VIPToolCatalog','VIPDashboardStats','VIPSystemStats','VIPActivityLogArchive','VIPAssetIndex'];
 
 async function getAllEntityRecords(entityName){
   const all=[];let skip=0;
@@ -494,7 +497,9 @@ async function collectBackupEntities(){
     VIPWorkflowFlowProgress:rows[7].map(backupRow),
     VIPToolCatalog:rows[8].map(backupRow),
     VIPDashboardStats:rows[9].map(backupRow),
-    VIPSystemStats:rows[10].map(backupRow)
+    VIPSystemStats:rows[10].map(backupRow),
+    VIPActivityLogArchive:rows[11].map(backupRow),
+    VIPAssetIndex:rows[12].map(backupRow)
   };
 }
 
@@ -505,6 +510,8 @@ function backupCounts(entities,repository){
     progress_stages:(entities.VIPProgressStage||entities.ProgressStage||[]).length,
     customers:(entities.VIPCustomer||entities.Customer||[]).length,
     activity_logs:(entities.VIPActivityLog||entities.ActivityLog||[]).length,
+    archived_activity_logs:(entities.VIPActivityLogArchive||[]).length,
+    asset_index:(entities.VIPAssetIndex||[]).length,
     workflow_definitions:(entities.VIPWorkflowDefinition||[]).length,
     workflow_progress:(entities.VIPWorkflowProgress||[]).length,
     workflow_flow_progress:(entities.VIPWorkflowFlowProgress||[]).length,
@@ -735,6 +742,12 @@ async function restoreEntities(entities,workflowAssetUrlMap={}){
     if(clean.action_type?.startsWith('progress_')&&clean.target_key&&progressMap[String(clean.target_key)])clean.target_key=progressMap[String(clean.target_key)];
     await base44.entities.VIPActivityLog.create(clean);
   }
+  for(const row of e.VIPActivityLogArchive||[]){
+    const clean=withoutOldId(row);
+    if(clean.customer_id&&customerMap[String(clean.customer_id)])clean.customer_id=customerMap[String(clean.customer_id)];
+    if(clean.action_type?.startsWith('progress_')&&clean.target_key&&progressMap[String(clean.target_key)])clean.target_key=progressMap[String(clean.target_key)];
+    await base44.entities.VIPActivityLogArchive.create(clean);
+  }
 
   for(const row of e.VIPWorkflowDefinition||[]){
     const clean=withoutOldId(row);
@@ -770,6 +783,11 @@ async function restoreEntities(entities,workflowAssetUrlMap={}){
   }
 
   for(const row of e.VIPToolCatalog||[])await base44.entities.VIPToolCatalog.create(withoutOldId(row));
+  for(const row of e.VIPAssetIndex||[]){
+    const clean=withoutOldId(row);
+    if(clean.url&&workflowAssetUrlMap[clean.url])clean.url=workflowAssetUrlMap[clean.url];
+    await base44.entities.VIPAssetIndex.create(clean);
+  }
   for(const row of e.VIPDashboardStats||[])await base44.entities.VIPDashboardStats.create(withoutOldId(row));
   for(const row of e.VIPSystemStats||[])await base44.entities.VIPSystemStats.create(withoutOldId(row));
 }
