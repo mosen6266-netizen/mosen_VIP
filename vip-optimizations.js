@@ -46,12 +46,16 @@ export async function ensureCustomerIndex(base44, query={}, maxRows=800){
   return {seen,updated};
 }
 async function upsertStat(base44,key,payload,scanStartedAt=''){
-  const rows=await base44.entities.VIPDashboardStats.filter({key},'-updated_date',1,0);
-  const row=(Array.isArray(rows)?rows:(rows?.items||[]))[0];
+  const found=await base44.entities.VIPDashboardStats.filter({key},'-updated_date',50,0);
+  const rows=Array.isArray(found)?found:(found?.items||[]);
+  const row=rows[0]||null;
   if(row&&scanStartedAt&&String(row.updated_at||row.updated_date||'')>scanStartedAt)return {skipped:true,row};
   const next={key,...payload,updated_at:new Date().toISOString(),version:Number(row?.version||0)+1};
   if(row) await base44.entities.VIPDashboardStats.update(row.id,next);
   else await base44.entities.VIPDashboardStats.create(next);
+  // VIPDashboardStats is derived cache data. Old restores/migrations could leave duplicate rows
+  // for the same key, and consumers might read an older duplicate. Keep exactly one row per key.
+  for(const extra of rows.slice(1)){try{await base44.entities.VIPDashboardStats.delete(extra.id)}catch(_){}}
   return {skipped:false,next};
 }
 export async function reconcileDashboardStats(base44){
@@ -72,6 +76,20 @@ export async function reconcileDashboardStats(base44){
   }
   await upsertStat(base44,'global',{scope:'global',rep_username:'',active_customers:active,archived_customers:archived,today_active_customers:today},scanStartedAt);
   for(const [rep,x] of counts) await upsertStat(base44,'rep:'+rep,{scope:'rep',rep_username:rep,active_customers:x.active,archived_customers:x.archived,today_active_customers:x.today},scanStartedAt);
+
+  // Remove stale/duplicate derived statistic rows that no longer correspond to actual customers.
+  // This prevents old imported cache rows from overriding correct per-rep counts.
+  try{
+    const statRowsRaw=await base44.entities.VIPDashboardStats.list({sort:'-updated_date',limit:500});
+    const statRows=Array.isArray(statRowsRaw)?statRowsRaw:(statRowsRaw?.items||[]);
+    const wanted=new Set(['global',...Array.from(counts.keys(),rep=>'rep:'+rep)]);
+    const kept=new Set();
+    for(const r of statRows){
+      const key=String(r.key||'');
+      if(!wanted.has(key)||kept.has(key)){try{await base44.entities.VIPDashboardStats.delete(r.id)}catch(_){}}
+      else kept.add(key);
+    }
+  }catch(_){}
   return {active,archived,today,reps:counts.size};
 }
 export async function archiveOldLogs(base44,{days=90,limit=1000}={}){
