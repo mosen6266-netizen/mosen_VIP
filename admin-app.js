@@ -1370,6 +1370,14 @@ async function clearBusinessDataFromSafetySnapshot(safety,note){
   for(const [name,rows,label] of order){
     await deleteBusinessRowsFromSnapshot(name,rows||[],note,label);
   }
+
+  // A safety snapshot can be slightly older than the live database (for example after a
+  // previously interrupted restore). Delete any rows that were not present in the snapshot
+  // as a final sweep, otherwise old customers/logs can survive and be mixed with the backup.
+  for(const [name,,label] of order){
+    if(note)showMessage(note,'正在核对并清理残留'+label+'…','warn');
+    await wipeEntity(name);
+  }
 }
 
 async function importBusinessBackup(file){
