@@ -78,15 +78,20 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
     </div>
 
     <div class="asset-section">
-      <div class="asset-head"><b>快捷方式管理</b><span>选择 VIP 工具，或者手动填写标题和路径</span></div>
-      <div class="asset-add">
-        <select id="shortcutSelect"><option value="">选择 VIP 工具…</option></select>
-        <button class="btn" id="addShortcut" type="button">添加工具</button>
+      <div class="asset-head"><b>快捷方式管理</b><span>只显示德国和美国工具，已移除“其它”分类</span></div>
+      <div class="field" style="margin-bottom:8px">
+        <label>德国工具</label>
+        <div class="asset-add">
+          <select id="shortcutSelectDe"><option value="">选择德国工具…</option></select>
+          <button class="btn" id="addShortcutDe" type="button">添加</button>
+        </div>
       </div>
-      <div class="asset-add three">
-        <input id="shortcutTitle" placeholder="快捷方式标题">
-        <input id="shortcutPath" placeholder="例如 网站风险查询.html">
-        <button class="btn" id="addCustomShortcut" type="button">自定义添加</button>
+      <div class="field" style="margin-bottom:8px">
+        <label>美国工具</label>
+        <div class="asset-add">
+          <select id="shortcutSelectUs"><option value="">选择美国工具…</option></select>
+          <button class="btn" id="addShortcutUs" type="button">添加</button>
+        </div>
       </div>
       <div id="shortcutList"></div>
     </div>
@@ -134,8 +139,6 @@ const FALLBACK_TOOLS=[
   {id:'lawyer-report-de',title:'资金路径调查律师报告 · 德国',path:'资金路径调查律师报告-德国.html',category:'de'},
   {id:'assistant-report-us',title:'资金路径调查助理报告',path:'资金路径调查助理报告.html',category:'us'},
   {id:'assistant-report-de',title:'资金路径调查助理报告 · 德国',path:'资金路径调查助理报告-德国.html',category:'de'},
-  {id:'docx-editor',title:'DOCX 文件编辑器',path:'DOCX文件编辑器.html',category:'other'},
-  {id:'email-editor',title:'邮件编辑器',path:'邮件编辑器.html',category:'other'},
   {id:'onchain-us',title:'Onchain Wallet · Address Intelligence',path:'tools/Onchain钱包地址查询.html',category:'us'},
   {id:'onchain-de',title:'Onchain Wallet · Adressanalyse',path:'tools/Onchain钱包地址查询-德国.html',category:'de'}
 ];
@@ -150,8 +153,15 @@ async function loadToolCatalog(){
     }
   }catch(_){}
   const seen=new Set();
-  toolCatalog=list.filter(t=>{const k=String(t.path||'');if(!k||seen.has(k))return false;seen.add(k);return true});
-  $('#shortcutSelect').innerHTML='<option value="">选择 VIP 工具…</option>'+toolCatalog.map((t,i)=>'<option value="'+i+'">'+esc(t.title)+' · '+esc(t.path)+'</option>').join('');
+  toolCatalog=list.filter(t=>{
+    const k=String(t.path||''),cat=String(t.category||'').toLowerCase();
+    if(!k||seen.has(k)||!['de','us'].includes(cat))return false;
+    seen.add(k);return true;
+  });
+  const de=toolCatalog.map((t,i)=>({t,i})).filter(x=>String(x.t.category).toLowerCase()==='de');
+  const us=toolCatalog.map((t,i)=>({t,i})).filter(x=>String(x.t.category).toLowerCase()==='us');
+  $('#shortcutSelectDe').innerHTML='<option value="">选择德国工具…</option>'+de.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+' · '+esc(x.t.path)+'</option>').join('');
+  $('#shortcutSelectUs').innerHTML='<option value="">选择美国工具…</option>'+us.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+' · '+esc(x.t.path)+'</option>').join('');
 }
 function renderAttachments(){
   const box=$('#attachmentList');
@@ -238,7 +248,7 @@ function openStep(id=''){
   pendingAttachments=safeClone(Array.isArray(s.attachments)?s.attachments:[]);
   pendingToolLinks=safeClone(Array.isArray(s.toolLinks)?s.toolLinks:[]);
   renderAttachments();renderToolLinks();
-  $('#attachmentPath').value='';$('#shortcutTitle').value='';$('#shortcutPath').value='';$('#shortcutSelect').value='';
+  $('#attachmentPath').value='';$('#shortcutSelectDe').value='';$('#shortcutSelectUs').value='';
   $('#stepNoteMsg').hidden=true;
   $('#stepModal').hidden=false;
   setTimeout(()=>$('#stepTitle').focus(),30);
@@ -291,17 +301,17 @@ $('#addAttachmentPath').onclick=()=>{
   const name=decodeURIComponent(p.split('/').pop().split('?')[0]||'附件');
   pendingAttachments.push({id:attachmentId(),name,url:p});$('#attachmentPath').value='';renderAttachments();
 };
-$('#addShortcut').onclick=()=>{
-  const i=Number($('#shortcutSelect').value);if(!Number.isInteger(i)||!toolCatalog[i])return;
-  const t=toolCatalog[i];pendingToolLinks.push({id:toolId(),title:t.title,path:normalizeToolPath(t.path),category:t.category||'other'});
-  $('#shortcutSelect').value='';renderToolLinks();
-};
-$('#addCustomShortcut').onclick=()=>{
-  const title=$('#shortcutTitle').value.trim(),path=normalizeToolPath($('#shortcutPath').value);
-  if(!title||!path){alert('请填写快捷方式标题和路径。');return}
-  pendingToolLinks.push({id:toolId(),title,path,category:'other'});
-  $('#shortcutTitle').value='';$('#shortcutPath').value='';renderToolLinks();
-};
+function addShortcutFrom(selectId){
+  const sel=$(selectId),i=Number(sel.value);
+  if(!Number.isInteger(i)||!toolCatalog[i])return;
+  const t=toolCatalog[i];
+  if(!['de','us'].includes(String(t.category||'').toLowerCase()))return;
+  if(pendingToolLinks.some(x=>String(x.path||'')===String(normalizeToolPath(t.path)))){alert('这个快捷方式已经添加过了。');return}
+  pendingToolLinks.push({id:toolId(),title:t.title,path:normalizeToolPath(t.path),category:t.category});
+  sel.value='';renderToolLinks();
+}
+$('#addShortcutDe').onclick=()=>addShortcutFrom('#shortcutSelectDe');
+$('#addShortcutUs').onclick=()=>addShortcutFrom('#shortcutSelectUs');
 $('#stepModal').onclick=e=>{if(e.target===$('#stepModal'))closeStep()};
 $('#reloadBtn').onclick=load;
 
