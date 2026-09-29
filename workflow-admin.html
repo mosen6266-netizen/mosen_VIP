@@ -126,6 +126,7 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
 </div>
 
 <script src="./vip-dialogs.js"></script>
+<script src="./vip-tool-catalog.js?v=20260929-1"></script>
 <script type="module">
 import { base44, esc } from './base44.js';
 
@@ -197,65 +198,14 @@ const FALLBACK_TOOLS=[
 ];
 
 async function loadToolCatalog(){
-  let list=[...FALLBACK_TOOLS];
   try{
-    const res=await fetch('./toolbox/tools/index.json',{cache:'no-store'});
-    if(res.ok){
-      const data=await res.json();
-      (data.tools||[]).forEach(t=>list.push({id:t.id||toolId(),title:t.title||t.name,path:t.path,category:t.category||'other'}));
-    }
-  }catch(_){}
-  try{
-    const res=await fetch('./toolbox/templates/index.json',{cache:'no-store'});
-    if(res.ok){
-      const data=await res.json();
-      (data.templates||[]).forEach(t=>{
-        const region=String(t.region||'').toLowerCase();
-        if(!['de','us'].includes(region))return;
-        const title=String(t.name||'模板').replace(/\.docx$/i,'');
-        const templatePath=String(t.path||'');
-        if(!templatePath)return;
-        list.push({
-          id:'docx-template-'+encodeURIComponent(templatePath),
-          title,
-          path:'DOCX文件编辑器.html?template='+encodeURIComponent(templatePath),
-          category:region
-        });
-      });
-    }
-  }catch(_){}
-  const seen=new Set();
-  toolCatalog=list.filter(t=>{
-    const k=String(t.path||''),cat=String(t.category||'').toLowerCase();
-    if(!k||seen.has(k)||!['de','us'].includes(cat))return false;
-    seen.add(k);return true;
-  });
-
-  let originalOrder={de:[],us:[]};
-  try{
-    const res=await fetch('./toolbox/global-order.json',{cache:'no-store'});
-    if(res.ok){
-      const data=await res.json();
-      originalOrder.de=Array.isArray(data?.toolCenter?.de)?data.toolCenter.de:[];
-      originalOrder.us=Array.isArray(data?.toolCenter?.us)?data.toolCenter.us:[];
-    }
-  }catch(_){}
-
-  function byOriginalOrder(region){
-    const order=originalOrder[region]||[];
-    return toolCatalog
-      .map((t,i)=>({t,i}))
-      .filter(x=>String(x.t.category).toLowerCase()===region)
-      .sort((a,b)=>{
-        const ai=order.indexOf(String(a.t.id||'')),bi=order.indexOf(String(b.t.id||''));
-        const ar=ai<0?9999:ai,br=bi<0?9999:bi;
-        if(ar!==br)return ar-br;
-        return a.i-b.i;
-      });
+    const catalog=await window.VIPToolCatalog.load(true);
+    toolCatalog=(catalog.items||[]).filter(t=>['de','us'].includes(String(t.category||'').toLowerCase()));
+  }catch(_){
+    toolCatalog=[...FALLBACK_TOOLS];
   }
-
-  const de=byOriginalOrder('de');
-  const us=byOriginalOrder('us');
+  const de=toolCatalog.map((t,i)=>({t,i})).filter(x=>String(x.t.category).toLowerCase()==='de');
+  const us=toolCatalog.map((t,i)=>({t,i})).filter(x=>String(x.t.category).toLowerCase()==='us');
   $('#shortcutSelectDe').innerHTML='<option value="">选择德国工具…</option>'+de.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+'</option>').join('');
   $('#shortcutSelectUs').innerHTML='<option value="">选择美国工具…</option>'+us.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+'</option>').join('');
 }
@@ -264,9 +214,19 @@ function renderAttachments(){
   box.innerHTML=pendingAttachments.length?pendingAttachments.map((a,i)=>'<div class="asset-row"><div><div class="name">'+esc(a.name||a.url||'附件')+'</div><div class="meta">'+esc(a.type||'')+(a.size?' · '+formatBytes(a.size):'')+(a.url?' · '+esc(a.url):'')+'</div></div><button class="btn danger remove-att" data-i="'+i+'" type="button">删除</button></div>').join(''):'<div class="empty-mini">暂无附件</div>';
   box.querySelectorAll('.remove-att').forEach(b=>b.onclick=()=>{pendingAttachments.splice(Number(b.dataset.i),1);renderAttachments()});
 }
+function liveToolRef(t){
+  const catalog={items:toolCatalog};
+  return window.VIPToolCatalog?.find(catalog,t)||null;
+}
 function renderToolLinks(){
   const box=$('#shortcutList');
-  box.innerHTML=pendingToolLinks.length?pendingToolLinks.map((t,i)=>'<div class="asset-row"><div><div class="name">'+esc(t.title||t.path||'快捷方式')+'</div><div class="meta">'+esc(t.path||'')+'</div></div><button class="btn danger remove-tool" data-i="'+i+'" type="button">删除</button></div>').join(''):'<div class="empty-mini">暂无快捷方式</div>';
+  box.innerHTML=pendingToolLinks.length?pendingToolLinks.map((t,i)=>{
+    const live=liveToolRef(t);
+    const title=live?.title||t.title||t.path||'快捷方式';
+    const path=live?.path||t.path||'';
+    const suffix=live?'':' · 工具中心中已不存在';
+    return '<div class="asset-row"><div><div class="name">'+esc(title)+'</div><div class="meta">'+esc(path)+esc(suffix)+'</div></div><button class="btn danger remove-tool" data-i="'+i+'" type="button">删除</button></div>';
+  }).join(''):'<div class="empty-mini">暂无快捷方式</div>';
   box.querySelectorAll('.remove-tool').forEach(b=>b.onclick=()=>{pendingToolLinks.splice(Number(b.dataset.i),1);renderToolLinks()});
 }
 
@@ -396,8 +356,9 @@ function render(){
   });
 }
 
-function openStep(id='',insertIndex=null,insertLabel=''){
+async function openStep(id='',insertIndex=null,insertLabel=''){
   const flow=activeFlow(); if(!flow)return;
+  await loadToolCatalog();
   hideStepContextMenu();
   editingStepId=id;
   pendingInsertIndex=id?null:(Number.isInteger(insertIndex)?insertIndex:null);
@@ -480,7 +441,7 @@ function addShortcutFrom(selectId){
   const t=toolCatalog[i];
   if(!['de','us'].includes(String(t.category||'').toLowerCase()))return;
   if(pendingToolLinks.some(x=>String(x.path||'')===String(normalizeToolPath(t.path)))){vipAlert('这个快捷方式已经添加过了。',{title:'重复快捷方式'});return}
-  pendingToolLinks.push({id:toolId(),title:t.title,path:normalizeToolPath(t.path),category:t.category});
+  pendingToolLinks.push({id:toolId(),toolId:t.id,title:t.title,path:normalizeToolPath(t.path),category:t.category});
   sel.value='';renderToolLinks();
 }
 $('#addShortcutDe').onclick=()=>addShortcutFrom('#shortcutSelectDe');
