@@ -1,9 +1,295 @@
 {
   "format": "MOSEN_VIP_BASE44_SCHEMA_BLUEPRINT",
-  "version": 2,
+  "version": 3,
   "app_id": "6abb8b9e7bc76cdfe0aeb883",
-  "generated_at": "2026-09-29T14:25:49.121Z",
+  "generated_at": "2026-09-29T14:57:38.725Z",
   "entities": [
+    {
+      "entity_name": "Client",
+      "entity_schema": {
+        "name": "Client",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "客户姓名或称呼"
+          },
+          "company": {
+            "type": "string",
+            "description": "所属公司"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "lead",
+              "active",
+              "paused",
+              "archived"
+            ],
+            "default": "lead"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "entity_name": "Document",
+      "entity_schema": {
+        "name": "Document",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "file_uri": {
+            "type": "string"
+          },
+          "file_name": {
+            "type": "string"
+          },
+          "file_type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "title",
+          "file_uri"
+        ]
+      }
+    },
+    {
+      "entity_name": "Note",
+      "entity_schema": {
+        "name": "Note",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pinned": {
+            "type": "boolean",
+            "default": false
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "sand",
+              "pine",
+              "amber",
+              "rose",
+              "sky"
+            ],
+            "default": "sand"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      }
+    },
+    {
+      "entity_name": "Project",
+      "entity_schema": {
+        "name": "Project",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planning",
+              "active",
+              "paused",
+              "done"
+            ],
+            "default": "planning"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "budget": {
+            "type": "number"
+          },
+          "progress": {
+            "type": "number",
+            "default": 0
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      }
+    },
+    {
+      "entity_name": "ScheduleEvent",
+      "entity_schema": {
+        "name": "ScheduleEvent",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "start_datetime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end_datetime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "meeting",
+              "call",
+              "deadline",
+              "focus",
+              "other"
+            ],
+            "default": "meeting"
+          },
+          "location": {
+            "type": "string"
+          },
+          "project_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "start_datetime"
+        ]
+      }
+    },
+    {
+      "entity_name": "Task",
+      "entity_schema": {
+        "name": "Task",
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "todo",
+              "in_progress",
+              "done"
+            ],
+            "default": "todo"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "default": "medium"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date"
+          },
+          "project_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      }
+    },
+    {
+      "entity_name": "Transaction",
+      "entity_schema": {
+        "name": "Transaction",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "income",
+              "expense"
+            ],
+            "default": "expense"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "category": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date"
+          },
+          "description": {
+            "type": "string"
+          },
+          "project_name": {
+            "type": "string"
+          },
+          "client_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "amount",
+          "date"
+        ]
+      }
+    },
     {
       "entity_name": "VIPActivityLog",
       "entity_schema": {
@@ -110,6 +396,21 @@
             "default": false
           },
           "search_text": {
+            "type": "string"
+          },
+          "customer_name_normalized": {
+            "type": "string"
+          },
+          "phone_normalized": {
+            "type": "string"
+          },
+          "email_normalized": {
+            "type": "string"
+          },
+          "wallet_normalized": {
+            "type": "string"
+          },
+          "country_normalized": {
             "type": "string"
           },
           "admin_sort_score": {
@@ -513,6 +814,132 @@
           "key"
         ],
         "name": "VIPSystemStats"
+      }
+    },
+    {
+      "entity_name": "VIPActivityLogArchive",
+      "entity_schema": {
+        "name": "VIPActivityLogArchive",
+        "type": "object",
+        "properties": {
+          "original_id": {
+            "type": "string"
+          },
+          "actor_username": {
+            "type": "string"
+          },
+          "actor_display_name": {
+            "type": "string"
+          },
+          "actor_type": {
+            "type": "string"
+          },
+          "action_type": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "target_key": {
+            "type": "string"
+          },
+          "target_label": {
+            "type": "string"
+          },
+          "old_value": {
+            "type": "string"
+          },
+          "new_value": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "event_time": {
+            "type": "string"
+          },
+          "event_day": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "archived_at": {
+            "type": "string"
+          },
+          "archive_month": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "original_id",
+          "action_type",
+          "message"
+        ]
+      }
+    },
+    {
+      "entity_name": "VIPAssetIndex",
+      "entity_schema": {
+        "name": "VIPAssetIndex",
+        "type": "object",
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          },
+          "storage": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "type": "string"
+          },
+          "use_count": {
+            "type": "number",
+            "default": 1
+          }
+        },
+        "required": [
+          "sha256",
+          "url"
+        ]
+      }
+    },
+    {
+      "entity_name": "User",
+      "entity_schema": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "description": "The role of the user in the app",
+            "enum": [
+              "admin",
+              "user"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "name": "User",
+        "type": "object"
       }
     }
   ]
