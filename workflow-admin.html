@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MOSEN VIP · 话术管理</title>
+<link rel="icon" type="image/svg+xml" href="./mosen-logo.svg">
+<style>
+:root{--line:#e6e9ef;--text:#172033;--muted:#758095;--bg:#f7f8fb;--purple:#6d4aff;--danger:#c9362b}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text)}
+button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;grid-template-columns:280px minmax(0,1fr)}
+.side{background:#fff;border-right:1px solid var(--line);padding:16px;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{font-size:12px;font-weight:900;color:var(--purple);letter-spacing:.05em}.side h1{font-size:19px;margin:5px 0 4px}.sub{font-size:11px;color:var(--muted);line-height:1.5}
+.flow-actions{display:flex;gap:7px;margin:14px 0}.btn{border:0;border-radius:9px;padding:8px 10px;font-size:12px;font-weight:800;cursor:pointer;background:#eef1f5;color:#344054}.btn.primary{background:var(--purple);color:#fff}.btn.danger{background:#fff0ef;color:var(--danger)}.btn:disabled{opacity:.55;cursor:not-allowed}
+.flow-list{display:grid;gap:6px}.flow-item{width:100%;border:0;background:transparent;border-radius:11px;padding:10px;text-align:left;cursor:pointer}.flow-item:hover{background:#f6f4ff}.flow-item.active{background:#eeeaff;color:#5c38d0}.flow-item b{display:block;font-size:13px}.flow-item span{display:block;font-size:10px;color:#8a93a4;margin-top:3px}
+.main{min-width:0;padding:18px}.toolbar{background:#fff;border:1px solid var(--line);border-radius:15px;padding:14px 16px;display:flex;gap:10px;align-items:center;position:sticky;top:12px;z-index:5;box-shadow:0 8px 28px rgba(20,29,48,.05)}
+.toolbar h2{font-size:18px;margin:0}.toolbar .meta{font-size:11px;color:var(--muted);margin-top:3px}.spacer{flex:1}.save-status{font-size:11px;color:#677287}
+.steps{display:grid;gap:8px;margin-top:12px}.step{background:#fff;border:1px solid var(--line);border-radius:13px;overflow:hidden}.step-head{display:flex;align-items:center;gap:9px;padding:9px 11px;border-bottom:1px solid #eef1f5}.num{width:27px;height:27px;border-radius:8px;background:#f1edff;color:#633fd7;display:grid;place-items:center;font-size:10px;font-weight:900;flex:0 0 auto}.step-title{min-width:0;flex:1}.step-title b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.step-title span{font-size:10px;color:#8a93a4}.step-actions{display:flex;gap:5px}
+.preview{padding:9px 11px;display:grid;grid-template-columns:1fr 1fr;gap:9px}.box{min-width:0}.label{font-size:9px;font-weight:900;color:#8a93a4;margin-bottom:3px}.clip{font-size:12px;line-height:1.45;color:#344054;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}.clip.zh{background:#f7f8fa;border-radius:8px;padding:7px 8px;color:#5e697b}
+.empty{background:#fff;border:1px dashed #cfd5df;border-radius:14px;padding:36px;text-align:center;color:#7b8495;margin-top:12px}
+.modal{position:fixed;inset:0;background:rgba(15,23,42,.48);z-index:50;display:grid;place-items:center;padding:18px}.modal[hidden]{display:none}.modal-card{width:min(760px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:18px;padding:20px;box-shadow:0 30px 90px rgba(15,23,42,.25)}
+.modal-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}.modal-head h3{margin:0;font-size:18px}.grid{display:grid;grid-template-columns:1fr 180px;gap:10px}.field{display:grid;gap:5px;margin-bottom:10px}.field label{font-size:11px;color:#667085;font-weight:800}.field input,.field select,.field textarea{width:100%;border:1px solid #d9dee7;border-radius:10px;padding:9px 10px;outline:none;background:#fff}.field textarea{min-height:115px;resize:vertical}.field textarea.large{min-height:150px}.field input:focus,.field textarea:focus,.field select:focus{border-color:#9b87ee;box-shadow:0 0 0 3px rgba(109,74,255,.08)}
+.notice{margin-top:10px;padding:9px 11px;border-radius:9px;background:#f6f8fa;font-size:11px;color:#667085}.notice.ok{background:#effaf5;color:#087443}.notice.err{background:#fff1f0;color:#b42318}
+@media(max-width:850px){.app{grid-template-columns:1fr}.side{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}.flow-list{display:flex;overflow:auto}.flow-item{min-width:190px}.main{padding:12px}.preview{grid-template-columns:1fr}.toolbar{top:5px}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <div class="brand">MOSEN VIP · 管理员</div>
+    <h1>话术管理</h1>
+    <div class="sub">在这里修改、添加、删除维权流程话术。保存后，业务员下一次打开维权流程会自动读取最新内容。</div>
+    <div class="flow-actions">
+      <button class="btn primary" id="addFlow">新增流程</button>
+      <button class="btn" id="renameFlow">改流程名</button>
+      <button class="btn danger" id="deleteFlow">删除流程</button>
+    </div>
+    <div class="flow-list" id="flowList"></div>
+  </aside>
+  <main class="main">
+    <div class="toolbar">
+      <div><h2 id="flowTitle">正在读取…</h2><div class="meta" id="flowMeta">请稍候</div></div>
+      <div class="spacer"></div>
+      <span class="save-status" id="saveStatus"></span>
+      <button class="btn primary" id="addStep">新增话术</button>
+      <button class="btn" id="reloadBtn">刷新</button>
+    </div>
+    <div class="steps" id="stepList"></div>
+  </main>
+</div>
+
+<div class="modal" id="stepModal" hidden>
+  <div class="modal-card">
+    <div class="modal-head"><h3 id="stepModalTitle">编辑话术</h3><div class="spacer"></div><button class="btn" id="closeStepModal">关闭</button></div>
+    <div class="grid">
+      <div class="field"><label>标题</label><input id="stepTitle" placeholder="例如 自我介绍"></div>
+      <div class="field"><label>类型</label><select id="stepType"><option>话术</option><option>提问</option><option>客户回复</option><option>操作提示</option><option>说明</option><option>结束语</option></select></div>
+    </div>
+    <div class="field"><label>中文参考</label><textarea class="large" id="stepZh"></textarea></div>
+    <div class="field"><label>实际发送内容（德语 / 英语）</label><textarea class="large" id="stepForeign"></textarea></div>
+    <div class="field"><label>备注（可选）</label><textarea id="stepNote"></textarea></div>
+    <div class="row" style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="btn" id="cancelStep">取消</button>
+      <button class="btn primary" id="saveStep">保存话术</button>
+    </div>
+    <div id="stepNoteMsg" class="notice" hidden></div>
+  </div>
+</div>
+
+<script type="module">
+import { base44, esc } from './base44.js';
+
+if(localStorage.getItem('mVIP_admin')!=='1'){
+  location.href='./admin.html';
+}
+
+const $=s=>document.querySelector(s);
+let row=null,state={workflows:[]},activeFlowId='',editingStepId='',busy=false;
+
+function uid(prefix='step'){return prefix+'-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8)}
+function unwrap(v){return Array.isArray(v)?v:(v?.items||[])}
+function activeFlow(){return (state.workflows||[]).find(f=>String(f.id)===String(activeFlowId))||state.workflows?.[0]||null}
+function setStatus(text,type=''){const el=$('#saveStatus');el.textContent=text;el.style.color=type==='err'?'#b42318':type==='ok'?'#087443':'#677287'}
+function safeClone(v){return JSON.parse(JSON.stringify(v))}
+
+async function load(){
+  setStatus('正在同步…');
+  try{
+    const rows=unwrap(await base44.entities.VIPWorkflowDefinition.filter({key:'main'},'-updated_date',5,0));
+    row=rows[0]||null;
+    if(!row||!row.bundle||!Array.isArray(row.bundle.workflows))throw new Error('未找到话术数据');
+    state=safeClone(row.bundle);
+    if(!activeFlowId||!state.workflows.some(f=>String(f.id)===String(activeFlowId)))activeFlowId=state.activeWorkflowId||state.workflows[0]?.id||'';
+    render();
+    setStatus('已同步','ok');
+  }catch(e){
+    $('#flowTitle').textContent='读取失败';
+    $('#flowMeta').textContent=e?.message||String(e);
+    $('#stepList').innerHTML='<div class="empty">无法读取话术数据，请刷新后重试。</div>';
+    setStatus('读取失败','err');
+  }
+}
+
+async function persist(message='已保存'){
+  if(busy)return;
+  busy=true;setStatus('保存中…');
+  try{
+    state.activeWorkflowId=activeFlowId;
+    const payload={bundle:safeClone(state),version:Number(row?.version||0)+1,updated_by:'admin',updated_at:new Date().toISOString()};
+    if(row){
+      await base44.entities.VIPWorkflowDefinition.update(row.id,payload);
+      row={...row,...payload};
+    }else{
+      row=await base44.entities.VIPWorkflowDefinition.create({key:'main',...payload});
+    }
+    setStatus(message,'ok');
+    return true;
+  }catch(e){
+    setStatus('保存失败','err');
+    alert('保存失败：'+(e?.message||String(e)));
+    return false;
+  }finally{busy=false}
+}
+
+function render(){
+  const flows=state.workflows||[];
+  $('#flowList').innerHTML=flows.map(f=>'<button class="flow-item '+(String(f.id)===String(activeFlowId)?'active':'')+'" data-flow="'+esc(f.id)+'"><b>'+esc(f.name||'未命名流程')+'</b><span>'+(f.steps?.length||0)+' 条话术</span></button>').join('')||'<div class="empty">暂无流程</div>';
+  $('#flowList').querySelectorAll('[data-flow]').forEach(b=>b.onclick=()=>{activeFlowId=b.dataset.flow;render()});
+  const flow=activeFlow();
+  $('#flowTitle').textContent=flow?.name||'暂无流程';
+  $('#flowMeta').textContent=flow?'共 '+(flow.steps?.length||0)+' 条话术 · 修改后自动同步给业务员':'请先新增一个流程';
+  $('#addStep').disabled=!flow;
+  $('#renameFlow').disabled=!flow;
+  $('#deleteFlow').disabled=!flow;
+  if(!flow){$('#stepList').innerHTML='<div class="empty">暂无流程，点击左侧“新增流程”开始。</div>';return}
+  const steps=Array.isArray(flow.steps)?flow.steps:[];
+  $('#stepList').innerHTML=steps.map((s,i)=>'<article class="step" data-step="'+esc(s.id)+'"><div class="step-head"><div class="num">'+(i+1)+'</div><div class="step-title"><b>'+esc(s.title||'未命名话术')+'</b><span>'+esc(s.type||'话术')+'</span></div><div class="step-actions"><button class="btn move-up" '+(i===0?'disabled':'')+'>↑</button><button class="btn move-down" '+(i===steps.length-1?'disabled':'')+'>↓</button><button class="btn edit-step">编辑</button><button class="btn danger delete-step">删除</button></div></div><div class="preview"><div class="box"><div class="label">中文参考</div><div class="clip zh">'+esc(s.contentZh||'—')+'</div></div><div class="box"><div class="label">实际发送内容</div><div class="clip">'+esc(s.contentForeign||'—')+'</div></div></div></article>').join('')||'<div class="empty">这个流程还没有话术，点击“新增话术”。</div>';
+  $('#stepList').querySelectorAll('.step').forEach(card=>{
+    const id=card.dataset.step;
+    card.querySelector('.edit-step').onclick=()=>openStep(id);
+    card.querySelector('.delete-step').onclick=()=>deleteStep(id);
+    card.querySelector('.move-up').onclick=()=>moveStep(id,-1);
+    card.querySelector('.move-down').onclick=()=>moveStep(id,1);
+  });
+}
+
+function openStep(id=''){
+  const flow=activeFlow(); if(!flow)return;
+  editingStepId=id;
+  const s=(flow.steps||[]).find(x=>String(x.id)===String(id))||{title:'',type:'话术',contentZh:'',contentForeign:'',note:''};
+  $('#stepModalTitle').textContent=id?'编辑话术':'新增话术';
+  $('#stepTitle').value=s.title||'';
+  $('#stepType').value=s.type||'话术';
+  $('#stepZh').value=s.contentZh||'';
+  $('#stepForeign').value=s.contentForeign||'';
+  $('#stepNote').value=s.note||'';
+  $('#stepNoteMsg').hidden=true;
+  $('#stepModal').hidden=false;
+  setTimeout(()=>$('#stepTitle').focus(),30);
+}
+function closeStep(){editingStepId='';$('#stepModal').hidden=true}
+async function saveStep(){
+  const flow=activeFlow();if(!flow)return;
+  const title=$('#stepTitle').value.trim(),type=$('#stepType').value||'话术',contentZh=$('#stepZh').value.trim(),contentForeign=$('#stepForeign').value.trim(),note=$('#stepNote').value.trim();
+  if(!title){$('#stepNoteMsg').hidden=false;$('#stepNoteMsg').className='notice err';$('#stepNoteMsg').textContent='请输入话术标题。';return}
+  flow.steps=Array.isArray(flow.steps)?flow.steps:[];
+  if(editingStepId){
+    const idx=flow.steps.findIndex(x=>String(x.id)===String(editingStepId));
+    if(idx>=0)flow.steps[idx]={...flow.steps[idx],title,type,contentZh,contentForeign,note};
+  }else{
+    flow.steps.push({id:uid(),title,type,contentZh,contentForeign,note,attachments:[],toolLinks:[]});
+  }
+  const ok=await persist('话术已保存');
+  if(ok){closeStep();render()}
+}
+async function deleteStep(id){
+  const flow=activeFlow();if(!flow)return;
+  const s=(flow.steps||[]).find(x=>String(x.id)===String(id));
+  if(!confirm('确定删除「'+(s?.title||'这条话术')+'」吗？'))return;
+  flow.steps=(flow.steps||[]).filter(x=>String(x.id)!==String(id));
+  if(await persist('话术已删除'))render();
+}
+async function moveStep(id,delta){
+  const flow=activeFlow();if(!flow)return;
+  const a=flow.steps||[],i=a.findIndex(x=>String(x.id)===String(id)),j=i+delta;
+  if(i<0||j<0||j>=a.length)return;
+  [a[i],a[j]]=[a[j],a[i]];
+  if(await persist('顺序已保存'))render();
+}
+
+$('#addStep').onclick=()=>openStep('');
+$('#closeStepModal').onclick=closeStep;$('#cancelStep').onclick=closeStep;$('#saveStep').onclick=saveStep;
+$('#stepModal').onclick=e=>{if(e.target===$('#stepModal'))closeStep()};
+$('#reloadBtn').onclick=load;
+
+$('#addFlow').onclick=async()=>{
+  const name=prompt('请输入新流程名称：');if(!name?.trim())return;
+  const id=uid('flow');state.workflows=Array.isArray(state.workflows)?state.workflows:[];
+  state.workflows.push({id,name:name.trim(),description:'',color:'#6d4aff',steps:[]});activeFlowId=id;
+  if(await persist('流程已新增'))render();
+};
+$('#renameFlow').onclick=async()=>{
+  const f=activeFlow();if(!f)return;
+  const name=prompt('修改流程名称：',f.name||'');if(!name?.trim())return;
+  f.name=name.trim();if(await persist('流程名称已修改'))render();
+};
+$('#deleteFlow').onclick=async()=>{
+  const f=activeFlow();if(!f)return;
+  if(!confirm('确定删除整个流程「'+(f.name||'未命名流程')+'」吗？其中所有话术都会一起删除。'))return;
+  state.workflows=(state.workflows||[]).filter(x=>String(x.id)!==String(f.id));
+  activeFlowId=state.workflows[0]?.id||'';
+  if(await persist('流程已删除'))render();
+};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('#stepModal').hidden)closeStep()});
+load();
+</script>
+</body>
+</html>
