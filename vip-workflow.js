@@ -184,7 +184,6 @@
   }
 
   function observeTables(){
-    installButtons(document);
     if(observer)return;
     observer=new MutationObserver(function(){installButtons(document);});
     observer.observe(document.body,{childList:true,subtree:true});
@@ -343,7 +342,6 @@
         setCompleted(progress,flow.id,done);
         saveProgress(currentCustomer.id,progress);
         renderAll(overlay,bundle,progress,flow.id);
-        installButtons(document);
       });
     });
 
@@ -361,7 +359,6 @@
           saveProgress(currentCustomer.id,progress);
           toast('已复制，并标记为已发送');
           renderAll(overlay,bundle,progress,flow.id);
-          installButtons(document);
         }catch(e){
           toast('复制失败，请重试');
         }
@@ -397,11 +394,9 @@
     if(e.key==='Escape'&&document.getElementById('vipFlowOverlay'))closePanel();
   });
 
-  injectStyles();
-  loadBundle().then(function(){
-    observeTables();
-    setInterval(function(){installButtons(document);},2500);
-  }).catch(function(){
-    observeTables();
-  });
+  window.MosenVIPWorkflow={
+    open:function(customerId,customerName){
+      return openPanel(customerId,customerName);
+    }
+  };
 })();
