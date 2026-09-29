@@ -44,5 +44,6 @@ jobs:
             echo "No preview changes"
           else
             git commit -m "Update static tool previews"
-            git push
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
