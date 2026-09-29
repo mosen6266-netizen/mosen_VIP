@@ -1148,7 +1148,15 @@ function adminServerQuery(){
   if(star==='1')q.starred=true;
   if(star==='0')q.starred=false;
   if(progress)q.completed_progress_ids={$in:[progress]};
-  const terms=[search,country].filter(Boolean).map(v=>({search_text:{$regex:adminRegexEscape(v),$options:'i'}}));
+  const terms=[];
+  if(search){
+    const rx={$regex:adminRegexEscape(search),$options:'i'};
+    terms.push({$or:[{customer_name_normalized:rx},{phone_normalized:rx},{email_normalized:rx},{wallet_normalized:rx},{search_text:rx}]});
+  }
+  if(country){
+    const rx={$regex:adminRegexEscape(country),$options:'i'};
+    terms.push({$or:[{country_normalized:rx},{search_text:rx}]});
+  }
   if(terms.length)q.$and=terms;
   return q;
 }
