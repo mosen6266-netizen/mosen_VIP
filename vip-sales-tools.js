@@ -17,7 +17,7 @@
       '.vip-sales-tools-preview-title{height:18px;display:flex;align-items:center;gap:6px;font-size:9.5px;font-weight:800;color:#667085;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:6px}',
       '.vip-sales-tools-preview-frame{position:relative;height:118px;border:1px solid #e2e7ee;border-radius:10px;overflow:hidden;background:linear-gradient(180deg,#fff,#f7f8fa)}',
       '.vip-sales-tools-preview-placeholder{position:absolute;inset:0;display:grid;place-items:center;padding:14px;text-align:center;color:#98a2b3;font-size:10px;line-height:1.55}',
-      '.vip-sales-tools-preview-frame iframe{position:absolute;left:0;top:0;width:820px;height:460px;border:0;transform:scale(.252);transform-origin:0 0;pointer-events:none;background:#fff}',
+      '.vip-sales-tools-preview-frame img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center;background:#fff}',
       '.vip-sales-tools-scroll{overflow:auto;padding:8px 7px 11px;scrollbar-width:thin}',
       '.vip-sales-tools-group{margin:2px 0 10px}.vip-sales-tools-group:last-child{margin-bottom:0}',
       '.vip-sales-tools-group{margin:4px 0 12px;border:1px solid #e4e7ec;border-radius:11px;overflow:hidden;background:#fff}.vip-sales-tools-group:last-child{margin-bottom:0}',
@@ -110,16 +110,20 @@
     if(link)link.classList.add('previewing');
     title.textContent=tool?.title?'预览 · '+tool.title:'工具预览';
     frame.innerHTML='';
-    if(!tool?.path){
+    if(!tool?.id){
       frame.innerHTML='<div class="vip-sales-tools-preview-placeholder">暂无可预览内容</div>';
       return;
     }
-    const iframe=document.createElement('iframe');
-    iframe.setAttribute('aria-hidden','true');
-    iframe.tabIndex=-1;
-    iframe.loading='eager';
-    iframe.src=window.VIPToolCatalog.toolboxUrl(tool.path);
-    frame.appendChild(iframe);
+    const img=document.createElement('img');
+    img.alt='';
+    img.loading='lazy';
+    img.decoding='async';
+    img.src=window.VIPToolCatalog.previewUrl(tool);
+    img.onerror=()=>{
+      if(!frame.contains(img))return;
+      frame.innerHTML='<div class="vip-sales-tools-preview-placeholder">这个工具的静态预览正在生成<br>点击工具仍可正常打开</div>';
+    };
+    frame.appendChild(img);
   }
 
   function bindPreviews(box,catalog){
@@ -173,7 +177,7 @@
       render(catalog);
     }catch(err){
       const aside=ensureShell();
-      aside.querySelector('.vip-sales-tools-scroll').innerHTML='<div class="vip-sales-tools-empty">工具目录读取失败，稍后会自动重试</div>';
+      aside.querySelector('.vip-sales-tools-scroll').innerHTML='<div class="vip-sales-tools-empty">工具目录读取失败，请刷新页面重试</div>';
     }
   }
 
@@ -181,11 +185,12 @@
     ensureStyle();
     ensureShell();
     placeSidebar();
-    refresh(true);
+    refresh(false);
     window.addEventListener('resize',placeSidebar);
-    window.addEventListener('focus',()=>refresh(true));
-    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true)});
-    setInterval(()=>refresh(true),60000);
+    window.addEventListener('focus',()=>refresh(false));
+    if(window.VIPToolCatalog?.subscribe){
+      window.VIPToolCatalog.subscribe(catalog=>render(catalog));
+    }
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
