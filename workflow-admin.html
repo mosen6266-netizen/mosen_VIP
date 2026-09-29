@@ -65,14 +65,10 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
     <div class="field"><label>备注（可选）</label><textarea id="stepNote"></textarea></div>
 
     <div class="asset-section">
-      <div class="asset-head"><b>附件管理</b><span>上传图片 / PDF / 文档，或填写 VIP 内部路径、网址</span></div>
+      <div class="asset-head"><b>图片附件</b><span>只上传本地图片</span></div>
       <div class="asset-add">
-        <label class="btn file-label">选择附件<input id="attachmentFile" type="file" multiple></label>
+        <label class="btn file-label">上传本地图片<input id="attachmentFile" type="file" accept="image/*" multiple></label>
         <div></div>
-      </div>
-      <div class="asset-add">
-        <input id="attachmentPath" placeholder="例如 data/chat-flow-assets/文件.png 或 https://...">
-        <button class="btn" id="addAttachmentPath" type="button">添加路径</button>
       </div>
       <div id="attachmentList"></div>
     </div>
@@ -291,7 +287,7 @@ function openStep(id=''){
   pendingAttachments=safeClone(Array.isArray(s.attachments)?s.attachments:[]);
   pendingToolLinks=safeClone(Array.isArray(s.toolLinks)?s.toolLinks:[]);
   renderAttachments();renderToolLinks();
-  $('#attachmentPath').value='';$('#shortcutSelectDe').value='';$('#shortcutSelectUs').value='';
+  $('#shortcutSelectDe').value='';$('#shortcutSelectUs').value='';
   $('#stepNoteMsg').hidden=true;
   $('#stepModal').hidden=false;
   setTimeout(()=>$('#stepTitle').focus(),30);
@@ -332,18 +328,14 @@ $('#closeStepModal').onclick=closeStep;$('#cancelStep').onclick=closeStep;$('#sa
 $('#attachmentFile').addEventListener('change',async e=>{
   const files=[...(e.target.files||[])]; if(!files.length)return;
   for(const file of files){
-    if(file.size>8*1024*1024){alert(file.name+' 超过 8MB。较大的附件请放入 VIP 工具箱后使用“添加路径”。');continue}
+    if(!String(file.type||'').startsWith('image/')){alert(file.name+' 不是图片文件。');continue}
+    if(file.size>8*1024*1024){alert(file.name+' 超过 8MB，请压缩图片后再上传。');continue}
     try{
       pendingAttachments.push({id:attachmentId(),name:file.name,type:file.type||'',size:file.size,data:await fileToData(file)});
-    }catch(err){alert('读取附件失败：'+file.name)}
+    }catch(err){alert('读取图片失败：'+file.name)}
   }
   e.target.value='';renderAttachments();
 });
-$('#addAttachmentPath').onclick=()=>{
-  const p=$('#attachmentPath').value.trim();if(!p)return;
-  const name=decodeURIComponent(p.split('/').pop().split('?')[0]||'附件');
-  pendingAttachments.push({id:attachmentId(),name,url:p});$('#attachmentPath').value='';renderAttachments();
-};
 function addShortcutFrom(selectId){
   const sel=$(selectId),i=Number(sel.value);
   if(!Number.isInteger(i)||!toolCatalog[i])return;
