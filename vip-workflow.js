@@ -1,7 +1,7 @@
 (function(){
   'use strict';
 
-  var DATA_URL='./data/chat-flows.json?v=20260929-1';
+  var DATA_URL='./toolbox/data/chat-flows.json?v=20260929-standalone-1';
   var STORAGE_PREFIX='mosen_vip_customer_flow_v1:';
   var OLD_BASE='./toolbox/';
   var flowBundle=null;
