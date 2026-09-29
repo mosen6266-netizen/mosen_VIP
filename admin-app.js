@@ -1,5 +1,5 @@
 import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, downloadCsv, uiAlert, uiConfirm, uiPrompt, localDateKey, buildCustomerSearchText, readDashboardStat, adjustDashboardStat, createEntityBatch } from './base44.js';
-import { customerSearchFields, ensureCustomerIndex, initGlobalSearch, runDailyMaintenance, smartCustomerSubscription } from './vip-optimizations.js?v=20260929-1';
+import { customerSearchFields, ensureCustomerIndex, initGlobalSearch, runDailyMaintenance, smartCustomerSubscription, reconcileDashboardStats } from './vip-optimizations.js?v=20260929-1';
 const ADMIN_HASH='78fd5f1e5a3f6eef05ab8d692942fd0ff4a8f4cc0e6087026626006a7fae452d';
 let reps=[],fields=[],customers=[],progressStages=[],editingCustomerId=null,draggedFieldId=null,dragSaving=false,draggedProgressId=null,progressDragSaving=false,editingFieldTypeId=null;
 let currentView='all',currentRepFilter='';
@@ -970,6 +970,206 @@ function adminServerQuery(){
   return q;
 }
 
+
+const BUSINESS_BACKUP_FORMAT='MOSEN_VIP_BUSINESS_DATA_BACKUP';
+const BUSINESS_BACKUP_VERSION=1;
+const BUSINESS_BACKUP_ENTITY_NAMES=[
+  'VIPSalesRep',
+  'VIPFormField',
+  'VIPProgressStage',
+  'VIPCustomer',
+  'VIPActivityLog',
+  'VIPActivityLogArchive',
+  'VIPWorkflowDefinition',
+  'VIPWorkflowProgress',
+  'VIPWorkflowFlowProgress'
+];
+
+async function collectBusinessBackupEntities(){
+  const rows=await Promise.all(BUSINESS_BACKUP_ENTITY_NAMES.map(name=>getAllEntityRecords(name)));
+  return {
+    VIPSalesRep:rows[0].map(backupRow),
+    VIPFormField:rows[1].map(backupRow),
+    VIPProgressStage:rows[2].map(backupRow),
+    VIPCustomer:rows[3].map(backupRow),
+    VIPActivityLog:rows[4].filter(x=>x.migration_duplicate!==true).map(backupRow),
+    VIPActivityLogArchive:rows[5].map(backupRow),
+    VIPWorkflowDefinition:rows[6].map(backupRow),
+    VIPWorkflowProgress:rows[7].map(backupRow),
+    VIPWorkflowFlowProgress:rows[8].map(backupRow)
+  };
+}
+
+function businessBackupCounts(entities){
+  return {
+    sales_reps:(entities.VIPSalesRep||[]).length,
+    form_fields:(entities.VIPFormField||[]).length,
+    progress_stages:(entities.VIPProgressStage||[]).length,
+    customers:(entities.VIPCustomer||[]).length,
+    activity_logs:(entities.VIPActivityLog||[]).length,
+    archived_activity_logs:(entities.VIPActivityLogArchive||[]).length,
+    workflow_definitions:(entities.VIPWorkflowDefinition||[]).length,
+    workflow_progress:(entities.VIPWorkflowProgress||[]).length,
+    workflow_flow_progress:(entities.VIPWorkflowFlowProgress||[]).length
+  };
+}
+
+async function makeBusinessBackup(note){
+  if(note)showMessage(note,'正在读取业务员、客户资料、登记字段、客户进度、日志和话术数据…','warn');
+  const entities=await collectBusinessBackupEntities();
+  const checksum=await sha256(JSON.stringify(entities));
+  return {
+    format:BUSINESS_BACKUP_FORMAT,
+    version:BUSINESS_BACKUP_VERSION,
+    exported_at:new Date().toISOString(),
+    checksum_sha256:checksum,
+    counts:businessBackupCounts(entities),
+    includes:{
+      sales_reps:true,
+      form_fields:true,
+      progress_stages:true,
+      customers:true,
+      customer_assignment:true,
+      customer_completed_progress:true,
+      customer_archive_and_starred_state:true,
+      activity_logs:true,
+      workflow_definitions:true,
+      workflow_customer_progress:true,
+      github_repository:false,
+      system_code:false,
+      tools_and_templates:false
+    },
+    entities
+  };
+}
+
+async function exportBusinessBackup(){
+  const note=document.getElementById('backupNote');
+  try{
+    const backup=await makeBusinessBackup(note);
+    const n=backup.counts;
+    downloadBackupObject(
+      backup,
+      'mosen_VIP-业务数据备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json'
+    );
+    showMessage(
+      note,
+      '业务数据备份已导出：业务员 '+n.sales_reps+
+      '、登记字段 '+n.form_fields+
+      '、客户进度设置 '+n.progress_stages+
+      '、客户 '+n.customers+
+      '、当前日志 '+n.activity_logs+
+      '、历史日志 '+n.archived_activity_logs+
+      '、话术配置 '+n.workflow_definitions+
+      '、客户话术进度 '+(n.workflow_progress+n.workflow_flow_progress)+'。未读取 GitHub 仓库。',
+      'ok'
+    );
+  }catch(err){
+    showMessage(note,'业务数据备份失败：'+(err?.message||String(err)),'err');
+  }
+}
+
+function validateBusinessBackup(raw){
+  if(raw?.format!==BUSINESS_BACKUP_FORMAT||Number(raw?.version)!==BUSINESS_BACKUP_VERSION){
+    throw new Error('这不是有效的 MOSEN VIP 业务数据备份');
+  }
+  const e=raw.entities||{};
+  for(const name of BUSINESS_BACKUP_ENTITY_NAMES){
+    if(!Array.isArray(e[name]))throw new Error('备份缺少 '+name+' 数据');
+  }
+  const allowedTypes=new Set(['text','number','date','datetime','email','tel','textarea','select']);
+  const fieldKeys=new Set();
+  for(const field of e.VIPFormField){
+    if(!field.field_key)throw new Error('存在缺少 field_key 的登记字段');
+    if(fieldKeys.has(String(field.field_key)))throw new Error('登记字段 key 重复：'+field.field_key);
+    fieldKeys.add(String(field.field_key));
+    if(!allowedTypes.has(String(field.field_type||'')))throw new Error('不支持的字段类型：'+String(field.field_type));
+  }
+  for(const p of e.VIPProgressStage){
+    if(!p.__old_id)throw new Error('客户进度缺少原始 ID，无法安全恢复客户勾选进度');
+  }
+  for(const cust of e.VIPCustomer){
+    if(cust.data!=null&&(typeof cust.data!=='object'||Array.isArray(cust.data)))throw new Error('客户资料格式不正确');
+    if(cust.completed_progress_ids!=null&&!Array.isArray(cust.completed_progress_ids))throw new Error('客户完成进度格式不正确');
+  }
+  return e;
+}
+
+async function importBusinessBackup(file){
+  const note=document.getElementById('backupNote');
+  window.MVIP_MAINTENANCE=true;
+  try{
+    showMessage(note,'正在校验业务数据备份…','warn');
+    const raw=JSON.parse(await file.text());
+    const entities=validateBusinessBackup(raw);
+    if(!raw.checksum_sha256)throw new Error('备份缺少完整性校验码');
+    const actual=await sha256(JSON.stringify(entities));
+    if(actual!==raw.checksum_sha256)throw new Error('备份完整性校验失败：文件可能已损坏或被修改');
+
+    const n=businessBackupCounts(entities);
+    const ok=await uiConfirm(
+      '业务数据备份校验通过。\n\n'+
+      '业务员：'+n.sales_reps+
+      '\n登记字段：'+n.form_fields+
+      '\n客户进度设置：'+n.progress_stages+
+      '\n客户：'+n.customers+
+      '\n当前日志：'+n.activity_logs+
+      '\n历史日志：'+n.archived_activity_logs+
+      '\n话术配置：'+n.workflow_definitions+
+      '\n客户话术进度：'+(n.workflow_progress+n.workflow_flow_progress)+
+      '\n\n继续后只会替换上述业务数据，不修改 GitHub 仓库、网页代码、工具或模板。',
+      {title:'恢复业务数据',confirmText:'开始恢复',danger:true}
+    );
+    if(!ok)return;
+
+    showMessage(note,'正在生成恢复前业务数据安全备份…','warn');
+    const safety=await makeBusinessBackup(null);
+    downloadBackupObject(
+      safety,
+      'mosen_VIP-恢复前业务数据备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json'
+    );
+
+    showMessage(note,'正在恢复业务数据，请不要关闭页面…','warn');
+    for(const name of [
+      'VIPActivityLogArchive',
+      'VIPActivityLog',
+      'VIPWorkflowFlowProgress',
+      'VIPWorkflowProgress',
+      'VIPWorkflowDefinition',
+      'VIPCustomer',
+      'VIPProgressStage',
+      'VIPFormField',
+      'VIPSalesRep',
+      'VIPDashboardStats',
+      'VIPSystemStats'
+    ]){
+      try{await wipeEntity(name)}catch(_){}
+    }
+
+    await restoreEntities(entities);
+    try{await reconcileDashboardStats(base44)}catch(_){}
+
+    await Promise.all([
+      loadReps(),
+      loadFields(),
+      loadProgress(),
+      loadCustomers({resetPage:true}),
+      loadLogs(true),
+      refreshCustomerCounts()
+    ]);
+
+    showMessage(
+      note,
+      '业务数据恢复成功：业务员、登记字段、客户进度设置、客户全部资料与归属、客户已完成进度、归档/星标状态、操作日志、全部话术和客户话术进度均已恢复。系统代码和 GitHub 仓库未修改。',
+      'ok'
+    );
+  }catch(err){
+    showMessage(note,'业务数据恢复失败：'+(err?.message||String(err)),'err');
+  }finally{
+    window.MVIP_MAINTENANCE=false;
+  }
+}
+
 const FULL_BACKUP_V5_FORMAT='MOSEN_VIP_DISASTER_BACKUP';
 const FULL_BACKUP_V5_VERSION=5;
 let jsZipPromise=null;
@@ -1281,6 +1481,9 @@ async function importV5Backup(file){
 async function importAnyBackup(file){
   const name=String(file?.name||'').toLowerCase();
   if(name.endsWith('.zip'))return importV5Backup(file);
+  let raw=null;
+  try{raw=JSON.parse(await file.text())}catch(_){}
+  if(raw?.format===BUSINESS_BACKUP_FORMAT)return importBusinessBackup(file);
   return importFullBackup(file);
 }
 
@@ -1492,7 +1695,7 @@ document.getElementById('closeCustomerModal').onclick=requestCloseAdminEditor;do
 document.getElementById('logDate').onchange=()=>loadLogs(true);
 document.getElementById('logSearch').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadLogs(true),350)};
 document.getElementById('refreshLogs').onclick=()=>loadLogs(true);
-document.getElementById('exportBackup').onclick=exportV5Backup;
+document.getElementById('exportBackup').onclick=exportBusinessBackup;
 document.getElementById('importBackup').onclick=()=>document.getElementById('backupFile').click();
 document.getElementById('backupFile').onchange=async e=>{const file=e.target.files?.[0];if(file)await importAnyBackup(file);e.target.value=''};
 document.getElementById('logoutBtn').onclick=()=>{localStorage.removeItem('mVIP_admin');location.reload()};
