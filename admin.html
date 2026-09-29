@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>墨森维权客户登记系统 · 管理员</title><link rel="icon" type="image/svg+xml" href="./mosen-logo.svg?v=20260926-18"><link rel="stylesheet" href="./style.css?v=20260927-36"></head><body>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>墨森维权客户登记系统 · 管理员</title><link rel="icon" type="image/svg+xml" href="./mosen-logo.svg?v=20260926-18"><link rel="stylesheet" href="./style.css?v=20260929-progress-37"></head><body>
 <div id="loginView" class="login-wrap"><div class="login-box"><div class="pill">管理员入口</div><h1 style="margin-top:12px">登录管理后台</h1><div class="muted">请输入管理员密码。</div><div class="field" style="margin-top:20px"><label>管理员密码</label><input id="adminPassword" type="password" autocomplete="current-password" placeholder="请输入密码"></div><button id="adminLogin" class="btn primary" style="width:100%;margin-top:18px">登录</button><div id="loginNote" class="notice" hidden></div></div></div>
 
 <div id="appView" hidden>
@@ -250,7 +250,7 @@ function showAdminView(view,repUsername=''){
   if(view==='reps'){document.getElementById('view-reps').hidden=false;document.querySelector('.sidebar-item[data-view="reps"]').classList.add('active')}
   if(view==='fields'){document.getElementById('view-fields').hidden=false;document.querySelector('.sidebar-item[data-view="fields"]').classList.add('active')}
   if(view==='progress'){document.getElementById('view-progress').hidden=false;document.querySelector('.sidebar-item[data-view="progress"]').classList.add('active')}
-  if(view==='workflows'){document.getElementById('view-workflows').hidden=false;document.querySelector('.sidebar-item[data-view="workflows"]').classList.add('active');const frame=document.getElementById('workflowAdminFrame');if(frame&&(!frame.src||frame.src==='about:blank'||!frame.src.includes('20260929-attachments-2')))frame.src='./workflow-admin.html?v=20260929-original-order-6'}
+  if(view==='workflows'){document.getElementById('view-workflows').hidden=false;document.querySelector('.sidebar-item[data-view="workflows"]').classList.add('active');const frame=document.getElementById('workflowAdminFrame');if(frame&&(!frame.src||frame.src==='about:blank'||!frame.src.includes('20260929-attachments-2')))frame.src='./workflow-admin.html?v=20260929-images-only-7'}
   if(view==='logs'){document.getElementById('view-logs').hidden=false;document.querySelector('.sidebar-item[data-view="logs"]').classList.add('active');loadLogs()}
   if(view==='backup'){document.getElementById('view-backup').hidden=false;document.querySelector('.sidebar-item[data-view="backup"]').classList.add('active')}
 }
