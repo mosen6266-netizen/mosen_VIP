@@ -1,5 +1,5 @@
 import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, uiAlert, uiConfirm, uiPrompt, localDateKey, buildCustomerSearchText, readDashboardStat, adjustDashboardStat, createEntityBatch } from './base44.js';
-import { customerSearchFields, ensureCustomerIndex, initGlobalSearch, smartCustomerSubscription } from './vip-optimizations.js?v=20260929-1';
+import { customerSearchFields, ensureCustomerIndex, initGlobalSearch, smartCustomerSubscription } from './vip-optimizations.js?v=20260929-countfix2';
 let username=localStorage.getItem('mVIP_rep_username')||'',displayName=localStorage.getItem('mVIP_rep_display_name')||'',fields=[],customers=[],progressStages=[],editingId=null;
 const CUSTOMER_PAGE_SIZE=50;
 let customerPage=1,customerHasNext=false,myCustomerTotal=0,myArchivedTotal=0,myTodayTotal=0,customerCountTimer=null;
