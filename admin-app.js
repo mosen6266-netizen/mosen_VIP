@@ -110,7 +110,15 @@ async function runIntegrityRepairV2(){
     }
 
     for(const [k,expected] of expectedGroups){
-      const have=currentGroups.get(k)||[];
+      const have=(currentGroups.get(k)||[]).sort((a,b)=>String(a.created_date||'').localeCompare(String(b.created_date||'')));
+      if(have.length>expected.length){
+        for(const extra of have.slice(expected.length)){
+          if(extra.migration_duplicate!==true){
+            await retryRateLimited(()=>base44.entities.VIPActivityLog.update(extra.id,{migration_duplicate:true}),8);
+            await waitMs(100);
+          }
+        }
+      }
       if(have.length>=expected.length)continue;
       const missing=expected.slice(have.length);
       for(const source of missing){
@@ -215,7 +223,7 @@ async function retryRateLimited(fn,attempts=4){
     try{return await fn()}catch(err){
       lastErr=err;
       const msg=String(err?.message||err||'').toLowerCase();
-      if(!msg.includes('rate limit')&&!msg.includes('429'))throw err;
+      if(!msg.includes('rate limit')&&!msg.includes('429')&&!msg.includes('traffic volume limit')&&!msg.includes('too many requests'))throw err;
       if(i<attempts-1)await waitMs(500*(i+1));
     }
   }
