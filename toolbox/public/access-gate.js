@@ -2,7 +2,7 @@
   'use strict';
 
   const OWNER = 'mosen6266-netizen';
-  const REPO = 'mosen6266';
+  const REPO = 'mosen_VIP';
   const BRANCH = 'main';
   const CONFIG_PATH = 'access-config.json';
   const RAW_CONFIG_URL = `https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/${CONFIG_PATH}`;
