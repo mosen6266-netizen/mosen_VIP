@@ -1068,6 +1068,38 @@ async function restoreWorkflowAssetsFromZip(zip,manifest,note){
   return urlMap;
 }
 
+async function fetchRepositoryArchiveSnapshot(JSZip,note,{silent=false}={}){
+  const archiveUrl='https://codeload.github.com/'+VIP_REPO_OWNER+'/'+VIP_REPO_NAME+'/zip/refs/heads/'+encodeURIComponent(VIP_REPO_BRANCH);
+  if(note&&!silent)showMessage(note,'V5：正在一次性下载 GitHub 仓库快照…','warn');
+  const response=await retryAsync(async()=>{
+    const r=await fetch(archiveUrl,{cache:'no-store'});
+    if(!r.ok)throw new Error('GitHub 仓库快照下载失败：HTTP '+r.status);
+    return r;
+  },4);
+  const sourceZip=await JSZip.loadAsync(await response.arrayBuffer());
+  const entries=Object.values(sourceZip.files).filter(x=>!x.dir);
+  if(!entries.length)throw new Error('GitHub 仓库快照为空');
+
+  const firstPath=String(entries[0].name||'');
+  const rootPrefix=firstPath.includes('/')?firstPath.slice(0,firstPath.indexOf('/')+1):'';
+  const files=[];
+  let done=0;
+  await mapLimit(entries,4,async entry=>{
+    let path=String(entry.name||'');
+    if(rootPrefix&&path.startsWith(rootPrefix))path=path.slice(rootPrefix.length);
+    path=path.replace(/^\/+/, '');
+    if(!path||path.startsWith('_site/'))return;
+    const bytes=await entry.async('uint8array');
+    files.push({path,mode:'100644',size:bytes.length,bytes});
+    done++;
+    if(note&&!silent&&(done%20===0||done===entries.length)){
+      showMessage(note,'V5：正在整理仓库快照 '+done+' / '+entries.length+'…','warn');
+    }
+  });
+  files.sort((a,b)=>a.path.localeCompare(b.path));
+  return files;
+}
+
 async function buildV5Backup(note,{silent=false}={}){
   const JSZip=await getJSZip();
   const zip=new JSZip();
@@ -1076,22 +1108,11 @@ async function buildV5Backup(note,{silent=false}={}){
   const entities=await collectBackupEntities();
   const workflowAssets=await addWorkflowAssetsToZip(zip,entities,note,silent);
 
-  if(note&&!silent)showMessage(note,'V5：正在读取整个 GitHub 仓库…','warn');
-  const tree=await githubPublicJson('/git/trees/'+encodeURIComponent(VIP_REPO_BRANCH)+'?recursive=1');
-  const repoFiles=(tree.tree||[]).filter(x=>x.type==='blob'&&!String(x.path||'').startsWith('_site/'));
-  let finished=0;
-  await mapLimit(repoFiles,6,async file=>{
-    const bytes=await retryAsync(async()=>{
-      const r=await fetch(repoRawUrl(file.path),{cache:'default'});
-      if(!r.ok)throw new Error(file.path+' HTTP '+r.status);
-      return new Uint8Array(await r.arrayBuffer());
-    });
-    zip.file('repository/'+file.path,bytes,{binary:true});
-    finished++;
-    if(note&&!silent&&(finished%8===0||finished===repoFiles.length)){
-      showMessage(note,'V5：正在打包仓库文件 '+finished+' / '+repoFiles.length+'…','warn');
-    }
-  });
+  const repoSnapshot=await fetchRepositoryArchiveSnapshot(JSZip,note,{silent});
+  for(const file of repoSnapshot){
+    zip.file('repository/'+file.path,file.bytes,{binary:true});
+  }
+  const repoFiles=repoSnapshot.map(({path,mode,size})=>({path,mode,size,sha:''}));
 
   Object.entries(entities).forEach(([name,rows])=>{
     zip.file('base44/entities/'+name+'.json',JSON.stringify(rows,null,2)+'\n');
@@ -1109,13 +1130,13 @@ async function buildV5Backup(note,{silent=false}={}){
     version:FULL_BACKUP_V5_VERSION,
     exported_at:new Date().toISOString(),
     app_id:'6abb8b9e7bc76cdfe0aeb883',
-    repository:{owner:VIP_REPO_OWNER,name:VIP_REPO_NAME,branch:VIP_REPO_BRANCH},
-    repository_files:repoFiles.map(x=>({path:x.path,mode:x.mode||'100644',size:x.size||0,sha:x.sha||''})),
+    repository:{owner:VIP_REPO_OWNER,name:VIP_REPO_NAME,branch:VIP_REPO_BRANCH,source:'github-codeload-archive'},
+    repository_files:repoFiles,
     counts:backupCounts(entities,{toolbox_files:repoFiles.filter(x=>String(x.path||'').startsWith('toolbox/'))}),
     entity_names:Object.keys(entities),
     workflow_assets:workflowAssets,
     generated_public_aliases:true,
-    notes:'V5 contains the entire repository snapshot, Base44 entity data, external workflow attachment bytes and the Base44 schema blueprint.'
+    notes:'V5 contains the entire repository snapshot, Base44 entity data, external workflow attachment bytes and the Base44 schema blueprint. Repository export uses one GitHub codeload archive request and does not consume GitHub REST API rate limit.'
   };
   zip.file('manifest.json',JSON.stringify(manifest,null,2)+'\n');
   zip.file('RESTORE_README.txt',
@@ -1131,11 +1152,16 @@ async function buildV5Backup(note,{silent=false}={}){
   );
 
   if(note&&!silent)showMessage(note,'V5：正在压缩备份文件…','warn');
+  let lastShown=-1;
   const blob=await zip.generateAsync(
     {type:'blob',compression:'DEFLATE',compressionOptions:{level:6}},
     meta=>{
       const pct=Math.round(meta.percent);
-      if(note&&!silent&&pct%10===0)showMessage(note,'V5：正在压缩 '+pct+'%…','warn');
+      const bucket=Math.floor(pct/10)*10;
+      if(note&&!silent&&bucket!==lastShown){
+        lastShown=bucket;
+        showMessage(note,'V5：正在压缩 '+Math.min(100,bucket)+'%…','warn');
+      }
     }
   );
   return {blob,manifest};
