@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>MOSEN VIP · 话术管理</title>
 <link rel="icon" type="image/svg+xml" href="./mosen-logo.svg">
 <style>
@@ -62,7 +65,7 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
     <div class="field"><label>备注（可选）</label><textarea id="stepNote"></textarea></div>
 
     <div class="asset-section">
-      <div class="asset-head"><b>附件</b><span>可上传图片、PDF、文档，也可填写 VIP 内部路径或网址</span></div>
+      <div class="asset-head"><b>附件管理</b><span>上传图片 / PDF / 文档，或填写 VIP 内部路径、网址</span></div>
       <div class="asset-add">
         <label class="btn file-label">选择附件<input id="attachmentFile" type="file" multiple></label>
         <div></div>
@@ -75,7 +78,7 @@ button,input,textarea,select{font:inherit}.app{min-height:100vh;display:grid;gri
     </div>
 
     <div class="asset-section">
-      <div class="asset-head"><b>快捷方式</b><span>选择 VIP 工具，或者手动填写标题和路径</span></div>
+      <div class="asset-head"><b>快捷方式管理</b><span>选择 VIP 工具，或者手动填写标题和路径</span></div>
       <div class="asset-add">
         <select id="shortcutSelect"><option value="">选择 VIP 工具…</option></select>
         <button class="btn" id="addShortcut" type="button">添加工具</button>
@@ -212,7 +215,7 @@ function render(){
   $('#deleteFlow').disabled=!flow;
   if(!flow){$('#stepList').innerHTML='<div class="empty">暂无流程，点击左侧“新增流程”开始。</div>';return}
   const steps=Array.isArray(flow.steps)?flow.steps:[];
-  $('#stepList').innerHTML=steps.map((s,i)=>'<article class="step" data-step="'+esc(s.id)+'"><div class="step-head"><div class="num">'+(i+1)+'</div><div class="step-title"><b>'+esc(s.title||'未命名话术')+'</b><span>'+esc(s.type||'话术')+'</span></div><div class="step-actions"><button class="btn move-up" '+(i===0?'disabled':'')+'>↑</button><button class="btn move-down" '+(i===steps.length-1?'disabled':'')+'>↓</button><button class="btn edit-step">编辑</button><button class="btn danger delete-step">删除</button></div></div><div class="preview"><div class="box"><div class="label">中文参考</div><div class="clip zh">'+esc(s.contentZh||'—')+'</div></div><div class="box"><div class="label">实际发送内容</div><div class="clip">'+esc(s.contentForeign||'—')+'</div></div></div></article>').join('')||'<div class="empty">这个流程还没有话术，点击“新增话术”。</div>';
+  $('#stepList').innerHTML=steps.map((s,i)=>'<article class="step" data-step="'+esc(s.id)+'"><div class="step-head"><div class="num">'+(i+1)+'</div><div class="step-title"><b>'+esc(s.title||'未命名话术')+'</b><span>'+esc(s.type||'话术')+' · 附件 '+((s.attachments||[]).length)+' · 快捷方式 '+((s.toolLinks||[]).length)+'</span></div><div class="step-actions"><button class="btn move-up" '+(i===0?'disabled':'')+'>↑</button><button class="btn move-down" '+(i===steps.length-1?'disabled':'')+'>↓</button><button class="btn edit-step">编辑</button><button class="btn danger delete-step">删除</button></div></div><div class="preview"><div class="box"><div class="label">中文参考</div><div class="clip zh">'+esc(s.contentZh||'—')+'</div></div><div class="box"><div class="label">实际发送内容</div><div class="clip">'+esc(s.contentForeign||'—')+'</div></div></div></article>').join('')||'<div class="empty">这个流程还没有话术，点击“新增话术”。</div>';
   $('#stepList').querySelectorAll('.step').forEach(card=>{
     const id=card.dataset.step;
     card.querySelector('.edit-step').onclick=()=>openStep(id);
