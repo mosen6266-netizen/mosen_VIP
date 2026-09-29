@@ -128,13 +128,13 @@
       <section id="view-backup" class="admin-view" hidden>
         <div class="card">
           <div class="section-title"><div class="dot"></div><h2>系统完整备份 / 恢复</h2><div class="spacer"></div><span class="pill">一键迁移全部数据和设置</span></div>
-          <div class="backup-intro">V4 完整系统备份包含：全部业务员、登记字段与分栏/类型/顺序/选项、客户进度、全部客户资料与归档/重点状态、操作日志、全部话术与分类、每个客户的话术完成进度，以及 VIP 工具中心全部工具、模板、排序和访问配置。恢复前会自动再导出一份当前系统安全备份。</div>
+          <div class="backup-intro">V5 完整灾难备份为 ZIP：包含整个 mosen_VIP GitHub 仓库、全部客户与业务员数据、登记字段、客户进度、操作日志、全部话术与分类、每个客户独立话术进度、实时工具目录、统计缓存、工具/模板/排序/访问配置，以及 Base44 schema 蓝图。恢复前会自动再生成一份当前系统 V5 安全备份。</div>
           <div class="backup-actions">
-            <button id="exportBackup" class="btn primary">导出完整系统备份</button>
-            <button id="importBackup" class="btn soft">导入完整备份并恢复</button>
-            <input id="backupFile" type="file" accept=".json,application/json" hidden>
+            <button id="exportBackup" class="btn primary">导出 V5 完整灾难备份</button>
+            <button id="importBackup" class="btn soft">导入 V5 / V4 备份并恢复</button>
+            <input id="backupFile" type="file" accept=".zip,.json,application/zip,application/json" hidden>
           </div>
-          <div class="notice warn" style="margin-top:16px">完整恢复会重建当前云端数据，并把 VIP 工具中心恢复到备份当时的文件、模板、分类和排序。请只导入本系统导出的完整备份文件。</div>
+          <div class="notice warn" style="margin-top:16px">V5 恢复会重建当前云端数据并恢复整个 GitHub 仓库；V4 JSON 仍可兼容导入。恢复期间系统会进入维护状态，暂停实时刷新，结束后一次性重新载入。</div>
           <div id="backupNote" class="notice" hidden></div>
         </div>
       </section>
@@ -973,7 +973,7 @@ async function githubWrite(path,token,options={}){
 }
 async function requestRestoreToken(){
   const token=await uiPrompt(
-    '完整恢复还需要把工具中心文件恢复到 mosen_VIP 仓库。请输入对 mosen_VIP 具有 Contents: Read and write 权限的 Fine-grained GitHub Token。Token 只用于这次恢复，不会保存。',
+    '完整恢复需要写回 mosen_VIP GitHub 仓库。请输入仅对 mosen_VIP 具有 Contents: Read and write 权限的 Fine-grained GitHub Token。Token 只用于本次恢复，不会保存。',
     {title:'GitHub 恢复授权',placeholder:'github_pat_…',confirmText:'验证并继续',textarea:false}
   );
   if(!token||!token.trim())return null;
@@ -1117,6 +1117,228 @@ function adminServerQuery(){
   if(terms.length)q.$and=terms;
   return q;
 }
+
+const FULL_BACKUP_V5_FORMAT='MOSEN_VIP_DISASTER_BACKUP';
+const FULL_BACKUP_V5_VERSION=5;
+let jsZipPromise=null;
+function getJSZip(){
+  if(!jsZipPromise)jsZipPromise=import('https://esm.sh/jszip@3.10.1').then(m=>m.default||m);
+  return jsZipPromise;
+}
+function downloadBlob(blob,filename){
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),5000);
+}
+async function mapLimit(items,limit,worker){
+  const out=new Array(items.length);let next=0;
+  async function run(){
+    while(true){
+      const i=next++;if(i>=items.length)return;
+      out[i]=await worker(items[i],i);
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(limit,Math.max(1,items.length))},()=>run()));
+  return out;
+}
+async function retryAsync(fn,attempts=4){
+  let last;
+  for(let i=0;i<attempts;i++){
+    try{return await fn(i)}catch(err){
+      last=err;
+      if(i<attempts-1)await new Promise(r=>setTimeout(r,500*Math.pow(2,i)));
+    }
+  }
+  throw last;
+}
+function repoRawUrl(path){
+  return 'https://raw.githubusercontent.com/'+VIP_REPO_OWNER+'/'+VIP_REPO_NAME+'/'+VIP_REPO_BRANCH+'/'+String(path).split('/').map(encodeURIComponent).join('/');
+}
+async function buildV5Backup(note,{silent=false}={}){
+  const JSZip=await getJSZip();
+  const zip=new JSZip();
+  if(note&&!silent)showMessage(note,'V5：正在读取全部云端数据…','warn');
+
+  const entities=await collectBackupEntities();
+
+  if(note&&!silent)showMessage(note,'V5：正在读取整个 GitHub 仓库…','warn');
+  const tree=await githubPublicJson('/git/trees/'+encodeURIComponent(VIP_REPO_BRANCH)+'?recursive=1');
+  const repoFiles=(tree.tree||[]).filter(x=>x.type==='blob'&&!String(x.path||'').startsWith('_site/'));
+  let finished=0;
+  await mapLimit(repoFiles,6,async file=>{
+    const bytes=await retryAsync(async()=>{
+      const r=await fetch(repoRawUrl(file.path),{cache:'default'});
+      if(!r.ok)throw new Error(file.path+' HTTP '+r.status);
+      return new Uint8Array(await r.arrayBuffer());
+    });
+    zip.file('repository/'+file.path,bytes,{binary:true});
+    finished++;
+    if(note&&!silent&&(finished%8===0||finished===repoFiles.length)){
+      showMessage(note,'V5：正在打包仓库文件 '+finished+' / '+repoFiles.length+'…','warn');
+    }
+  });
+
+  Object.entries(entities).forEach(([name,rows])=>{
+    zip.file('base44/entities/'+name+'.json',JSON.stringify(rows,null,2)+'\n');
+  });
+
+  let schemaBlueprint=null;
+  try{
+    const r=await fetch('./base44-schema-blueprint.json',{cache:'default'});
+    if(r.ok)schemaBlueprint=await r.json();
+  }catch(_){}
+  if(schemaBlueprint)zip.file('base44/schema-blueprint.json',JSON.stringify(schemaBlueprint,null,2)+'\n');
+
+  const manifest={
+    format:FULL_BACKUP_V5_FORMAT,
+    version:FULL_BACKUP_V5_VERSION,
+    exported_at:new Date().toISOString(),
+    app_id:'6abb8b9e7bc76cdfe0aeb883',
+    repository:{owner:VIP_REPO_OWNER,name:VIP_REPO_NAME,branch:VIP_REPO_BRANCH},
+    repository_files:repoFiles.map(x=>({path:x.path,mode:x.mode||'100644',size:x.size||0,sha:x.sha||''})),
+    counts:backupCounts(entities,{toolbox_files:repoFiles.filter(x=>String(x.path||'').startsWith('toolbox/'))}),
+    entity_names:Object.keys(entities),
+    generated_public_aliases:true,
+    notes:'V5 contains the entire repository snapshot, Base44 entity data and the Base44 schema blueprint.'
+  };
+  zip.file('manifest.json',JSON.stringify(manifest,null,2)+'\n');
+  zip.file('RESTORE_README.txt',
+    'MOSEN VIP V5 灾难恢复包\n\n'+
+    '本 ZIP 包包含：\n'+
+    '1. repository/：mosen_VIP GitHub 仓库完整快照；\n'+
+    '2. base44/entities/：全部 VIP 云端实体数据；\n'+
+    '3. base44/schema-blueprint.json：Base44 数据结构蓝图；\n'+
+    '4. manifest.json：版本、文件清单与数量。\n\n'+
+    '在当前 MOSEN VIP 系统中使用“导入 V5 灾难备份”可恢复当前 Base44 数据和整个 GitHub 仓库。\n'+
+    '如果原 GitHub 仓库或原 Base44 App 均已不存在，请先创建新的空 GitHub 仓库和 Base44 App，再使用本包中的 repository/ 与 schema-blueprint.json 重建。恢复后把 config.js 的 APP_ID 指向新 App。\n'
+  );
+
+  if(note&&!silent)showMessage(note,'V5：正在压缩备份文件…','warn');
+  const blob=await zip.generateAsync(
+    {type:'blob',compression:'DEFLATE',compressionOptions:{level:6}},
+    meta=>{
+      const pct=Math.round(meta.percent);
+      if(note&&!silent&&pct%10===0)showMessage(note,'V5：正在压缩 '+pct+'%…','warn');
+    }
+  );
+  return {blob,manifest};
+}
+async function exportV5Backup(){
+  const note=document.getElementById('backupNote');
+  try{
+    const {blob,manifest}=await buildV5Backup(note);
+    const name='mosen_VIP-V5-完整灾难备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip';
+    downloadBlob(blob,name);
+    showMessage(note,'V5 完整灾难备份已导出：客户 '+(manifest.counts.customers||0)+'、日志 '+(manifest.counts.activity_logs||0)+'、仓库文件 '+manifest.repository_files.length+'。ZIP 同时包含整个仓库、全部云端数据和 Base44 schema 蓝图。','ok');
+  }catch(err){
+    showMessage(note,'V5 备份失败：'+(err?.message||String(err)),'err');
+  }
+}
+async function readZipJson(zip,path){
+  const entry=zip.file(path);if(!entry)return null;
+  return JSON.parse(await entry.async('string'));
+}
+async function restoreRepositoryFromZip(zip,manifest,token,note){
+  const list=Array.isArray(manifest.repository_files)?manifest.repository_files:[];
+  if(!list.length)throw new Error('V5 备份没有仓库文件清单');
+
+  showMessage(note,'正在准备恢复整个 GitHub 仓库…','warn');
+  const ref=await githubWrite('/git/ref/heads/'+encodeURIComponent(VIP_REPO_BRANCH),token,{method:'GET'});
+  const headSha=ref.object?.sha;
+  const headCommit=await githubWrite('/git/commits/'+headSha,token,{method:'GET'});
+  const baseTree=headCommit.tree?.sha;
+  const currentTree=await githubWrite('/git/trees/'+baseTree+'?recursive=1',token,{method:'GET'});
+  const currentFiles=(currentTree.tree||[]).filter(x=>x.type==='blob').map(x=>x.path);
+  const backupPaths=new Set(list.map(x=>x.path));
+  let done=0;
+
+  const entries=await mapLimit(list,5,async meta=>{
+    const entry=zip.file('repository/'+meta.path);
+    if(!entry)throw new Error('ZIP 缺少仓库文件：'+meta.path);
+    const base64=await entry.async('base64');
+    const blob=await retryAsync(()=>githubWrite('/git/blobs',token,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({content:base64,encoding:'base64'})
+    }),4);
+    done++;
+    if(done%6===0||done===list.length)showMessage(note,'正在上传仓库文件 '+done+' / '+list.length+'…','warn');
+    return {path:meta.path,mode:meta.mode||'100644',type:'blob',sha:blob.sha};
+  });
+  currentFiles.filter(p=>!backupPaths.has(p)).forEach(path=>entries.push({path,mode:'100644',type:'blob',sha:null}));
+
+  const newTree=await githubWrite('/git/trees',token,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({base_tree:baseTree,tree:entries})
+  });
+  const commit=await githubWrite('/git/commits',token,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({message:'Restore MOSEN VIP from V5 disaster backup',tree:newTree.sha,parents:[headSha]})
+  });
+  await githubWrite('/git/refs/heads/'+encodeURIComponent(VIP_REPO_BRANCH),token,{
+    method:'PATCH',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({sha:commit.sha,force:false})
+  });
+  return commit.sha;
+}
+async function importV5Backup(file){
+  const note=document.getElementById('backupNote');
+  window.MVIP_MAINTENANCE=true;
+  try{
+    const JSZip=await getJSZip();
+    showMessage(note,'正在读取 V5 ZIP 备份…','warn');
+    const zip=await JSZip.loadAsync(file);
+    const manifest=await readZipJson(zip,'manifest.json');
+    if(!manifest||manifest.format!==FULL_BACKUP_V5_FORMAT||Number(manifest.version)!==FULL_BACKUP_V5_VERSION){
+      throw new Error('这不是有效的 MOSEN VIP V5 灾难备份');
+    }
+
+    const entities={};
+    for(const name of manifest.entity_names||[]){
+      const rows=await readZipJson(zip,'base44/entities/'+name+'.json');
+      if(Array.isArray(rows))entities[name]=rows;
+    }
+    const required=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPActivityLog','VIPWorkflowDefinition'];
+    for(const name of required)if(!Array.isArray(entities[name]))throw new Error('V5 备份缺少 '+name);
+
+    const token=await requestRestoreToken();
+    if(!token){showMessage(note,'已取消恢复。','warn');return}
+
+    const ok=await uiConfirm(
+      'V5 备份校验通过。\n\n客户：'+(entities.VIPCustomer?.length||0)+
+      '\n日志：'+(entities.VIPActivityLog?.length||0)+
+      '\n仓库文件：'+(manifest.repository_files?.length||0)+
+      '\n\n继续后会先自动生成一份当前系统的 V5 安全备份，然后恢复全部 Base44 数据和整个 GitHub 仓库。',
+      {title:'恢复 V5 灾难备份',confirmText:'开始完整恢复',danger:true}
+    );
+    if(!ok)return;
+
+    showMessage(note,'正在生成恢复前 V5 安全备份…','warn');
+    const safety=await buildV5Backup(note,{silent:true});
+    downloadBlob(safety.blob,'mosen_VIP-V5-恢复前安全备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip');
+
+    showMessage(note,'正在恢复 Base44 全部数据，实时刷新已暂停…','warn');
+    for(const name of ['VIPActivityLog','VIPWorkflowFlowProgress','VIPWorkflowProgress','VIPToolCatalog','VIPDashboardStats','VIPWorkflowDefinition','VIPCustomer','VIPProgressStage','VIPFormField','VIPSalesRep']){
+      try{await wipeEntity(name)}catch(_){}
+    }
+    await restoreEntities(entities);
+
+    await restoreRepositoryFromZip(zip,manifest,token,note);
+
+    window.MVIP_MAINTENANCE=false;
+    await Promise.all([loadReps(),loadFields(),loadProgress(),loadCustomers({resetPage:true}),loadLogs(true),refreshCustomerCounts()]);
+    showMessage(note,'V5 完整恢复已提交：Base44 数据和整个 GitHub 仓库都已恢复。GitHub Pages 正在自动重新部署；部署完成后刷新页面即可。','ok');
+  }catch(err){
+    window.MVIP_MAINTENANCE=false;
+    showMessage(note,'V5 恢复未完成：'+(err?.message||String(err))+'。如果已经进入恢复阶段，请使用刚才自动下载的“V5 恢复前安全备份”。','err');
+  }
+}
+async function importAnyBackup(file){
+  const name=String(file?.name||'').toLowerCase();
+  if(name.endsWith('.zip'))return importV5Backup(file);
+  return importFullBackup(file);
+}
+
 async function fetchAllAdminCustomers(query){
   const all=[];let skip=0;
   while(true){const batch=unwrap(await base44.entities.VIPCustomer.filter(query,'-admin_sort_score',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500;if(skip>10000)break}
@@ -1326,9 +1548,9 @@ document.getElementById('closeCustomerModal').onclick=requestCloseAdminEditor;do
 document.getElementById('logDate').onchange=()=>loadLogs(true);
 document.getElementById('logSearch').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadLogs(true),350)};
 document.getElementById('refreshLogs').onclick=()=>loadLogs(true);
-document.getElementById('exportBackup').onclick=exportFullBackup;
+document.getElementById('exportBackup').onclick=exportV5Backup;
 document.getElementById('importBackup').onclick=()=>document.getElementById('backupFile').click();
-document.getElementById('backupFile').onchange=async e=>{const file=e.target.files?.[0];if(file)await importFullBackup(file);e.target.value=''};
+document.getElementById('backupFile').onchange=async e=>{const file=e.target.files?.[0];if(file)await importAnyBackup(file);e.target.value=''};
 document.getElementById('logoutBtn').onclick=()=>{localStorage.removeItem('mVIP_admin');location.reload()};
 if(localStorage.getItem('mVIP_admin')==='1')enter();
 </script><script src="./vip-tool-catalog.js?v=20260929-catalog-2"></script><script src="./vip-workflow.js?v=20260929-standalone-sync-6"></script></body></html>
