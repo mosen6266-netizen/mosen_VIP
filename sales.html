@@ -398,4 +398,4 @@ document.getElementById('salesCountryFilter').addEventListener('input',()=>{clea
 document.getElementById('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadCustomers({resetPage:true}),450)};
 document.getElementById('logoutBtn').onclick=async()=>{if(editorDirty()&&!await uiConfirm('当前有未保存内容，退出后草稿仍保留在本机。',{title:'确认退出',confirmText:'退出登录',danger:true}))return;localStorage.removeItem('mVIP_rep_username');localStorage.removeItem('mVIP_rep_display_name');location.href='./login.html'};
 boot();
-</script><script src="./vip-tool-catalog.js?v=20260929-catalog-2"></script><script src="./vip-sales-tools.js?v=20260929-sidebar-preview-3"></script><script src="./vip-workflow.js?v=20260929-standalone-sync-6"></script></body></html>
+</script><script src="./vip-tool-catalog.js?v=20260929-catalog-2"></script><script src="./vip-sales-tools.js?v=20260929-category-strong-4"></script><script src="./vip-workflow.js?v=20260929-standalone-sync-6"></script></body></html>
