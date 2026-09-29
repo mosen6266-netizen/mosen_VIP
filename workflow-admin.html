@@ -175,10 +175,27 @@ function categoryById(id){return (state.categories||[]).find(x=>String(x.id)===S
 function setStatus(text,type=''){const el=$('#saveStatus');el.textContent=text;el.style.color=type==='err'?'#b42318':type==='ok'?'#087443':'#677287'}
 function safeClone(v){return JSON.parse(JSON.stringify(v))}
 function formatBytes(n){n=Number(n||0);if(!n)return'';const u=['B','KB','MB','GB'];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return (i?n.toFixed(1):Math.round(n))+' '+u[i]}
+async function sha256File(file){
+  const bytes=await file.arrayBuffer();
+  const digest=await crypto.subtle.digest('SHA-256',bytes);
+  return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
 async function uploadAttachmentFile(file){
+  const sha256=await sha256File(file);
+  try{
+    const rows=unwrap(await base44.entities.VIPAssetIndex.filter({sha256},'-created_date',1,0));
+    const hit=rows[0];
+    if(hit?.url){
+      base44.entities.VIPAssetIndex.update(hit.id,{last_used_at:new Date().toISOString(),use_count:Number(hit.use_count||1)+1}).catch(()=>{});
+      return hit.url;
+    }
+  }catch(_){}
   const result=await base44.integrations.Core.UploadFile({file});
   const url=result?.file_url||result?.url||result?.data?.file_url||'';
   if(!url)throw new Error('上传完成但没有返回文件地址');
+  try{
+    await base44.entities.VIPAssetIndex.create({sha256,url,name:file.name||'',mime_type:file.type||'',size:Number(file.size||0),storage:'base44',created_at:new Date().toISOString(),last_used_at:new Date().toISOString(),use_count:1});
+  }catch(_){}
   return url;
 }
 function attachmentId(){return uid('att')}
