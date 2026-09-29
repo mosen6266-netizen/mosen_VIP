@@ -899,7 +899,7 @@ async function validateBackupChecksum(raw){
   }
 }
 
-async function restoreEntities(entities){
+async function restoreEntities(entities,workflowAssetUrlMap={}){
   const e=normalizeLegacyEntities(entities);
 
   for(const row of e.VIPSalesRep||[])await base44.entities.VIPSalesRep.create(withoutOldId(row));
@@ -936,7 +936,22 @@ async function restoreEntities(entities){
   }
 
   for(const row of e.VIPWorkflowDefinition||[]){
-    await base44.entities.VIPWorkflowDefinition.create(withoutOldId(row));
+    const clean=withoutOldId(row);
+    if(clean.bundle&&workflowAssetUrlMap&&Object.keys(workflowAssetUrlMap).length){
+      clean.bundle=safeClone(clean.bundle);
+      for(const flow of clean.bundle.workflows||[]){
+        for(const step of flow.steps||[]){
+          for(const att of step.attachments||[]){
+            const oldUrl=String(att?.url||'');
+            if(oldUrl&&workflowAssetUrlMap[oldUrl]){
+              att.url=workflowAssetUrlMap[oldUrl];
+              att.storage='base44';
+            }
+          }
+        }
+      }
+    }
+    await base44.entities.VIPWorkflowDefinition.create(clean);
   }
 
   for(const row of e.VIPWorkflowProgress||[]){
@@ -1161,12 +1176,75 @@ async function retryAsync(fn,attempts=4){
 function repoRawUrl(path){
   return 'https://raw.githubusercontent.com/'+VIP_REPO_OWNER+'/'+VIP_REPO_NAME+'/'+VIP_REPO_BRANCH+'/'+String(path).split('/').map(encodeURIComponent).join('/');
 }
+function externalWorkflowAssets(entities){
+  const seen=new Map(),items=[];
+  for(const row of entities.VIPWorkflowDefinition||[]){
+    for(const flow of row.bundle?.workflows||[]){
+      for(const step of flow.steps||[]){
+        for(const att of step.attachments||[]){
+          const url=String(att?.url||'').trim();
+          if(!url||url.startsWith('data:')||url.startsWith('./')||url.startsWith('../')||url.startsWith('/'))continue;
+          if(!/^https?:\/\//i.test(url)||seen.has(url))continue;
+          const key=String(att.id||('asset-'+(items.length+1))).replace(/[^a-zA-Z0-9._-]+/g,'_');
+          const name=String(att.name||('workflow-asset-'+(items.length+1))).replace(/[\\/:*?"<>|]+/g,'_');
+          const path='base44/workflow-assets/'+key+'-'+name;
+          const meta={old_url:url,path,name,type:String(att.type||'application/octet-stream'),size:Number(att.size||0)};
+          seen.set(url,meta);items.push(meta);
+        }
+      }
+    }
+  }
+  return items;
+}
+async function addWorkflowAssetsToZip(zip,entities,note,silent){
+  const assets=externalWorkflowAssets(entities);
+  if(!assets.length)return [];
+  let done=0;
+  await mapLimit(assets,4,async meta=>{
+    const bytes=await retryAsync(async()=>{
+      const r=await fetch(meta.old_url,{cache:'no-store'});
+      if(!r.ok)throw new Error('话术附件读取失败：'+meta.name+' (HTTP '+r.status+')');
+      return new Uint8Array(await r.arrayBuffer());
+    },4);
+    meta.size=bytes.length;
+    zip.file(meta.path,bytes,{binary:true});
+    done++;
+    if(note&&!silent&&(done%3===0||done===assets.length)){
+      showMessage(note,'V5：正在备份独立话术附件 '+done+' / '+assets.length+'…','warn');
+    }
+  });
+  return assets;
+}
+async function restoreWorkflowAssetsFromZip(zip,manifest,note){
+  const assets=Array.isArray(manifest.workflow_assets)?manifest.workflow_assets:[];
+  const urlMap={};
+  if(!assets.length)return urlMap;
+  let done=0;
+  await mapLimit(assets,3,async meta=>{
+    const entry=zip.file(meta.path);
+    if(!entry)throw new Error('ZIP 缺少话术附件：'+meta.name);
+    const bytes=await entry.async('uint8array');
+    const file=new File([bytes],meta.name||'workflow-asset',{type:meta.type||'application/octet-stream'});
+    const uploaded=await retryAsync(async()=>{
+      const result=await base44.integrations.Core.UploadFile({file});
+      const url=result?.file_url||result?.url||result?.data?.file_url||'';
+      if(!url)throw new Error('附件上传后没有返回地址');
+      return url;
+    },4);
+    urlMap[String(meta.old_url||'')]=uploaded;
+    done++;
+    if(note&&(done%3===0||done===assets.length))showMessage(note,'正在恢复独立话术附件 '+done+' / '+assets.length+'…','warn');
+  });
+  return urlMap;
+}
+
 async function buildV5Backup(note,{silent=false}={}){
   const JSZip=await getJSZip();
   const zip=new JSZip();
   if(note&&!silent)showMessage(note,'V5：正在读取全部云端数据…','warn');
 
   const entities=await collectBackupEntities();
+  const workflowAssets=await addWorkflowAssetsToZip(zip,entities,note,silent);
 
   if(note&&!silent)showMessage(note,'V5：正在读取整个 GitHub 仓库…','warn');
   const tree=await githubPublicJson('/git/trees/'+encodeURIComponent(VIP_REPO_BRANCH)+'?recursive=1');
@@ -1205,8 +1283,9 @@ async function buildV5Backup(note,{silent=false}={}){
     repository_files:repoFiles.map(x=>({path:x.path,mode:x.mode||'100644',size:x.size||0,sha:x.sha||''})),
     counts:backupCounts(entities,{toolbox_files:repoFiles.filter(x=>String(x.path||'').startsWith('toolbox/'))}),
     entity_names:Object.keys(entities),
+    workflow_assets:workflowAssets,
     generated_public_aliases:true,
-    notes:'V5 contains the entire repository snapshot, Base44 entity data and the Base44 schema blueprint.'
+    notes:'V5 contains the entire repository snapshot, Base44 entity data, external workflow attachment bytes and the Base44 schema blueprint.'
   };
   zip.file('manifest.json',JSON.stringify(manifest,null,2)+'\n');
   zip.file('RESTORE_README.txt',
@@ -1215,7 +1294,8 @@ async function buildV5Backup(note,{silent=false}={}){
     '1. repository/：mosen_VIP GitHub 仓库完整快照；\n'+
     '2. base44/entities/：全部 VIP 云端实体数据；\n'+
     '3. base44/schema-blueprint.json：Base44 数据结构蓝图；\n'+
-    '4. manifest.json：版本、文件清单与数量。\n\n'+
+    '4. base44/workflow-assets/：独立文件存储中的话术附件原始文件；\n'+
+    '5. manifest.json：版本、文件清单与数量。\n\n'+
     '在当前 MOSEN VIP 系统中使用“导入 V5 灾难备份”可恢复当前 Base44 数据和整个 GitHub 仓库。\n'+
     '如果原 GitHub 仓库或原 Base44 App 均已不存在，请先创建新的空 GitHub 仓库和 Base44 App，再使用本包中的 repository/ 与 schema-blueprint.json 重建。恢复后把 config.js 的 APP_ID 指向新 App。\n'
   );
@@ -1236,7 +1316,7 @@ async function exportV5Backup(){
     const {blob,manifest}=await buildV5Backup(note);
     const name='mosen_VIP-V5-完整灾难备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.zip';
     downloadBlob(blob,name);
-    showMessage(note,'V5 完整灾难备份已导出：客户 '+(manifest.counts.customers||0)+'、日志 '+(manifest.counts.activity_logs||0)+'、仓库文件 '+manifest.repository_files.length+'。ZIP 同时包含整个仓库、全部云端数据和 Base44 schema 蓝图。','ok');
+    showMessage(note,'V5 完整灾难备份已导出：客户 '+(manifest.counts.customers||0)+'、日志 '+(manifest.counts.activity_logs||0)+'、仓库文件 '+manifest.repository_files.length+'、独立话术附件 '+(manifest.workflow_assets?.length||0)+'。ZIP 同时包含整个仓库、全部云端数据、附件原文件和 Base44 schema 蓝图。','ok');
   }catch(err){
     showMessage(note,'V5 备份失败：'+(err?.message||String(err)),'err');
   }
@@ -1315,7 +1395,8 @@ async function importV5Backup(file){
       'V5 备份校验通过。\n\n客户：'+(entities.VIPCustomer?.length||0)+
       '\n日志：'+(entities.VIPActivityLog?.length||0)+
       '\n仓库文件：'+(manifest.repository_files?.length||0)+
-      '\n\n继续后会先自动生成一份当前系统的 V5 安全备份，然后恢复全部 Base44 数据和整个 GitHub 仓库。',
+      '\n独立话术附件：'+(manifest.workflow_assets?.length||0)+
+      '\n\n继续后会先自动生成一份当前系统的 V5 安全备份，然后恢复全部 Base44 数据、附件文件和整个 GitHub 仓库。',
       {title:'恢复 V5 灾难备份',confirmText:'开始完整恢复',danger:true}
     );
     if(!ok)return;
@@ -1328,7 +1409,8 @@ async function importV5Backup(file){
     for(const name of ['VIPActivityLog','VIPWorkflowFlowProgress','VIPWorkflowProgress','VIPToolCatalog','VIPDashboardStats','VIPWorkflowDefinition','VIPCustomer','VIPProgressStage','VIPFormField','VIPSalesRep']){
       try{await wipeEntity(name)}catch(_){}
     }
-    await restoreEntities(entities);
+    const workflowAssetUrlMap=await restoreWorkflowAssetsFromZip(zip,manifest,note);
+    await restoreEntities(entities,workflowAssetUrlMap);
 
     await restoreRepositoryFromZip(zip,manifest,token,note);
 
