@@ -23,6 +23,7 @@
         <button class="sidebar-item" data-view="reps"><span class="sidebar-icon">◎</span><span class="sidebar-text">业务员管理</span></button>
         <button class="sidebar-item" data-view="fields"><span class="sidebar-icon">≡</span><span class="sidebar-text">登记字段</span><span id="sidebarFieldCount" class="sidebar-count">0</span></button>
         <button class="sidebar-item" data-view="progress"><span class="sidebar-icon">✓</span><span class="sidebar-text">客户进度</span><span id="sidebarProgressCount" class="sidebar-count">0</span></button>
+        <button class="sidebar-item" data-view="workflows"><span class="sidebar-icon">✎</span><span class="sidebar-text">话术管理</span></button>
         <button class="sidebar-item" data-view="logs"><span class="sidebar-icon">◷</span><span class="sidebar-text">日志</span><span id="sidebarLogCount" class="sidebar-count">0</span></button>
         <button class="sidebar-item" data-view="backup"><span class="sidebar-icon">⇅</span><span class="sidebar-text">备份恢复</span></button>
       </div>
@@ -102,6 +103,11 @@
           </div>
           <div id="progressNote" class="notice" hidden></div>
           <div id="progressList" style="margin-top:16px"></div>
+        </div>
+      </section>
+      <section id="view-workflows" class="admin-view" hidden>
+        <div class="card" style="padding:0;overflow:hidden">
+          <iframe id="workflowAdminFrame" src="about:blank" title="话术管理" style="display:block;width:100%;height:calc(100vh - 150px);min-height:720px;border:0;background:#f7f8fb"></iframe>
         </div>
       </section>
       <section id="view-logs" class="admin-view" hidden>
@@ -244,6 +250,7 @@ function showAdminView(view,repUsername=''){
   if(view==='reps'){document.getElementById('view-reps').hidden=false;document.querySelector('.sidebar-item[data-view="reps"]').classList.add('active')}
   if(view==='fields'){document.getElementById('view-fields').hidden=false;document.querySelector('.sidebar-item[data-view="fields"]').classList.add('active')}
   if(view==='progress'){document.getElementById('view-progress').hidden=false;document.querySelector('.sidebar-item[data-view="progress"]').classList.add('active')}
+  if(view==='workflows'){document.getElementById('view-workflows').hidden=false;document.querySelector('.sidebar-item[data-view="workflows"]').classList.add('active');const frame=document.getElementById('workflowAdminFrame');if(frame&&frame.src==='about:blank')frame.src='./workflow-admin.html?v=20260929-1'}
   if(view==='logs'){document.getElementById('view-logs').hidden=false;document.querySelector('.sidebar-item[data-view="logs"]').classList.add('active');loadLogs()}
   if(view==='backup'){document.getElementById('view-backup').hidden=false;document.querySelector('.sidebar-item[data-view="backup"]').classList.add('active')}
 }
@@ -252,6 +259,7 @@ document.querySelector('.sidebar-item[data-view="archive"]').onclick=()=>showAdm
 document.querySelector('.sidebar-item[data-view="reps"]').onclick=()=>showAdminView('reps');
 document.querySelector('.sidebar-item[data-view="fields"]').onclick=()=>showAdminView('fields');
 document.querySelector('.sidebar-item[data-view="progress"]').onclick=()=>showAdminView('progress');
+document.querySelector('.sidebar-item[data-view="workflows"]').onclick=()=>showAdminView('workflows');
 document.querySelector('.sidebar-item[data-view="logs"]').onclick=()=>showAdminView('logs');
 document.querySelector('.sidebar-item[data-view="backup"]').onclick=()=>showAdminView('backup');
 
