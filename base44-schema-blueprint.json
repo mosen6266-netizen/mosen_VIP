@@ -1,0 +1,476 @@
+{
+  "format": "MOSEN_VIP_BASE44_SCHEMA_BLUEPRINT",
+  "version": 1,
+  "app_id": "6abb8b9e7bc76cdfe0aeb883",
+  "generated_at": "2026-09-29T14:01:03.966Z",
+  "entities": [
+    {
+      "entity_name": "VIPActivityLog",
+      "entity_schema": {
+        "name": "VIPActivityLog",
+        "type": "object",
+        "properties": {
+          "actor_username": {
+            "type": "string"
+          },
+          "actor_display_name": {
+            "type": "string"
+          },
+          "actor_type": {
+            "type": "string"
+          },
+          "action_type": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "target_key": {
+            "type": "string"
+          },
+          "target_label": {
+            "type": "string"
+          },
+          "old_value": {
+            "type": "string"
+          },
+          "new_value": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "event_time": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "legacy_source_id": {
+            "type": "string"
+          },
+          "event_day": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action_type",
+          "message"
+        ],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    },
+    {
+      "entity_name": "VIPCustomer",
+      "entity_schema": {
+        "name": "VIPCustomer",
+        "type": "object",
+        "properties": {
+          "rep_username": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          },
+          "completed_progress_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "archived": {
+            "type": "boolean",
+            "default": false
+          },
+          "archived_at": {
+            "type": "string"
+          },
+          "archived_by_username": {
+            "type": "string"
+          },
+          "archived_by_display_name": {
+            "type": "string"
+          },
+          "archived_by_type": {
+            "type": "string"
+          },
+          "archive_reason": {
+            "type": "string"
+          },
+          "starred": {
+            "type": "boolean",
+            "default": false
+          },
+          "search_text": {
+            "type": "string"
+          },
+          "admin_sort_score": {
+            "type": "number",
+            "default": 0
+          },
+          "legacy_source_id": {
+            "type": "string"
+          }
+        },
+        "required": [],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    },
+    {
+      "entity_name": "VIPDashboardStats",
+      "entity_schema": {
+        "name": "VIPDashboardStats",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "rep_username": {
+            "type": "string"
+          },
+          "active_customers": {
+            "type": "number",
+            "default": 0
+          },
+          "archived_customers": {
+            "type": "number",
+            "default": 0
+          },
+          "today_active_customers": {
+            "type": "number",
+            "default": 0
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number",
+            "default": 1
+          }
+        },
+        "required": [
+          "key",
+          "scope"
+        ],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    },
+    {
+      "entity_name": "VIPFormField",
+      "entity_schema": {
+        "name": "VIPFormField",
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "field_key": {
+            "type": "string"
+          },
+          "field_type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number",
+              "date",
+              "datetime",
+              "email",
+              "tel",
+              "textarea",
+              "select"
+            ],
+            "default": "text"
+          },
+          "options": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean",
+            "default": false
+          },
+          "order": {
+            "type": "number",
+            "default": 0
+          },
+          "active": {
+            "type": "boolean",
+            "default": true
+          },
+          "group_name": {
+            "type": "string"
+          },
+          "legacy_source_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "field_key",
+          "field_type"
+        ],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    },
+    {
+      "entity_name": "VIPProgressStage",
+      "entity_schema": {
+        "name": "VIPProgressStage",
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number",
+            "default": 0
+          },
+          "active": {
+            "type": "boolean",
+            "default": true
+          },
+          "legacy_source_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    },
+    {
+      "entity_name": "VIPSalesRep",
+      "entity_schema": {
+        "name": "VIPSalesRep",
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "legacy_source_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    },
+    {
+      "entity_name": "VIPToolCatalog",
+      "entity_schema": {
+        "name": "VIPToolCatalog",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number",
+            "default": 1
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "source_hash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "items"
+        ],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    },
+    {
+      "entity_name": "VIPWorkflowDefinition",
+      "entity_schema": {
+        "name": "VIPWorkflowDefinition",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "bundle": {
+            "type": "object"
+          },
+          "version": {
+            "type": "number",
+            "default": 1
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "bundle"
+        ],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    },
+    {
+      "entity_name": "VIPWorkflowFlowProgress",
+      "entity_schema": {
+        "name": "VIPWorkflowFlowProgress",
+        "type": "object",
+        "properties": {
+          "unique_key": {
+            "type": "string"
+          },
+          "customer_id": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "flow_id": {
+            "type": "string"
+          },
+          "completed_step_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "hide_done": {
+            "type": "boolean",
+            "default": false
+          },
+          "version": {
+            "type": "number",
+            "default": 1
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "migrated_from_legacy": {
+            "type": "boolean",
+            "default": false
+          },
+          "is_active": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "unique_key",
+          "customer_id",
+          "flow_id"
+        ],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    },
+    {
+      "entity_name": "VIPWorkflowProgress",
+      "entity_schema": {
+        "name": "VIPWorkflowProgress",
+        "type": "object",
+        "properties": {
+          "customer_id": {
+            "type": "string"
+          },
+          "customer_name": {
+            "type": "string"
+          },
+          "active_flow_id": {
+            "type": "string"
+          },
+          "hide_done": {
+            "type": "boolean",
+            "default": false
+          },
+          "flows": {
+            "type": "object"
+          },
+          "updated_by": {
+            "type": "string"
+          },
+          "legacy_local_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "customer_id"
+        ],
+        "rls": {
+          "read": {},
+          "create": {},
+          "update": {},
+          "delete": {}
+        }
+      }
+    }
+  ]
+}
