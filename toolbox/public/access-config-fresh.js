@@ -2,7 +2,7 @@
   'use strict';
 
   const OWNER = 'mosen6266-netizen';
-  const REPO = 'mosen6266';
+  const REPO = 'mosen_VIP';
   const BRANCH = 'main';
   const CONFIG_PATH = 'access-config.json';
   const API_URL = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${CONFIG_PATH}?ref=${encodeURIComponent(BRANCH)}`;
