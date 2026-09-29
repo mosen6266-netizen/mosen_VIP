@@ -62,6 +62,7 @@ export async function reconcileDashboardStats(base44){
     const batch=await base44.entities.VIPCustomer.list({sort:'-created_date',limit:500,skip});
     const rows=Array.isArray(batch)?batch:(batch?.items||[]);
     for(const r of rows){
+      if(r.duplicate_record===true)continue;
       const rep=String(r.rep_username||''), x=counts.get(rep)||{active:0,archived:0,today:0};
       if(r.archived===true){archived++;x.archived++}
       else{active++;x.active++;const cd=String(r.created_date||'').slice(0,10);if(cd===todayKey){today++;x.today++}}
@@ -140,7 +141,7 @@ export function initGlobalSearch({base44,role='admin',repUsername='',onCustomer,
     const q=norm(raw),out=overlay?.querySelector('.mgs-results');if(!out)return;if(q.length<1){out.innerHTML='<div class="mgs-empty">输入关键词开始搜索</div>';return}
     const mine=++seq;out.innerHTML='<div class="mgs-empty">正在搜索…</div>';
     const safe=q.replace(/[.*+?^$()|[\]\\]/g,'\\$&'),rx={$regex:safe,$options:'i'};
-    const cq={$or:[{id:q},{search_text:rx},{customer_name_normalized:rx},{phone_normalized:rx},{email_normalized:rx},{wallet_normalized:rx}]};
+    const cq={duplicate_record:{$ne:true},$or:[{id:q},{search_text:rx},{customer_name_normalized:rx},{phone_normalized:rx},{email_normalized:rx},{wallet_normalized:rx}]};
     if(role==='sales')cq.rep_username=repUsername;
     const jobs=[base44.entities.VIPCustomer.filter(cq,'-updated_date',12,0)];
     if(role==='admin')jobs.push(base44.entities.VIPSalesRep.filter({$or:[{username:rx},{display_name:rx}]},'-created_date',8,0));else jobs.push(Promise.resolve([]));
