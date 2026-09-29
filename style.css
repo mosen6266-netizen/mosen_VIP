@@ -526,3 +526,60 @@ body.ui-dialog-open{overflow:hidden}
   line-height:1;
   justify-self:end
 }
+
+
+/* VIP admin customer-progress management compatibility */
+#view-progress .card{min-width:0}
+#view-progress .section-title{flex-wrap:wrap}
+#view-progress>.card>.row{align-items:flex-end}
+#progressList{min-width:0}
+#progressList .field-sort-list{overflow:visible}
+#progressList .progress-sort-row{
+  grid-template-columns:42px minmax(220px,1fr) 64px minmax(190px,auto);
+  gap:10px;
+  min-width:0;
+}
+#progressList .progress-sort-row .field-sort-name{min-width:0}
+#progressList .progress-sort-row .progress-name-input{
+  min-width:0;
+  width:100%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+#progressList .progress-sort-row>.row{
+  justify-content:flex-end;
+  flex-wrap:nowrap;
+  gap:6px;
+  min-width:max-content;
+}
+#progressList .progress-sort-row>.row .btn{
+  white-space:nowrap;
+  word-break:keep-all;
+  flex:0 0 auto;
+  padding:8px 10px;
+  font-size:12px;
+}
+@media(max-width:1050px){
+  #view-progress>.card>.row{align-items:stretch}
+  #view-progress>.card>.row .field{min-width:0!important;width:100%}
+  #view-progress>.card>.row #addProgress{align-self:auto!important}
+  #progressList .progress-sort-row{
+    grid-template-columns:36px minmax(0,1fr) auto;
+  }
+  #progressList .progress-sort-row .field-sort-order{display:none}
+}
+@media(max-width:720px){
+  #progressList .progress-sort-row{
+    grid-template-columns:32px minmax(0,1fr);
+    padding:10px;
+    gap:8px;
+  }
+  #progressList .progress-sort-row>.row{
+    grid-column:2;
+    justify-content:flex-start;
+    min-width:0;
+    flex-wrap:wrap;
+  }
+  #progressList .progress-sort-row>.row .btn{flex:1;min-width:108px}
+}
