@@ -163,7 +163,7 @@ async function loadToolCatalog(){
         const templatePath=String(t.path||'');
         if(!templatePath)return;
         list.push({
-          id:'template-'+region+'-'+title,
+          id:'docx-template-'+encodeURIComponent(templatePath),
           title,
           path:'DOCX文件编辑器.html?template='+encodeURIComponent(templatePath),
           category:region
@@ -177,8 +177,32 @@ async function loadToolCatalog(){
     if(!k||seen.has(k)||!['de','us'].includes(cat))return false;
     seen.add(k);return true;
   });
-  const de=toolCatalog.map((t,i)=>({t,i})).filter(x=>String(x.t.category).toLowerCase()==='de');
-  const us=toolCatalog.map((t,i)=>({t,i})).filter(x=>String(x.t.category).toLowerCase()==='us');
+
+  let originalOrder={de:[],us:[]};
+  try{
+    const res=await fetch('./toolbox/global-order.json',{cache:'no-store'});
+    if(res.ok){
+      const data=await res.json();
+      originalOrder.de=Array.isArray(data?.toolCenter?.de)?data.toolCenter.de:[];
+      originalOrder.us=Array.isArray(data?.toolCenter?.us)?data.toolCenter.us:[];
+    }
+  }catch(_){}
+
+  function byOriginalOrder(region){
+    const order=originalOrder[region]||[];
+    return toolCatalog
+      .map((t,i)=>({t,i}))
+      .filter(x=>String(x.t.category).toLowerCase()===region)
+      .sort((a,b)=>{
+        const ai=order.indexOf(String(a.t.id||'')),bi=order.indexOf(String(b.t.id||''));
+        const ar=ai<0?9999:ai,br=bi<0?9999:bi;
+        if(ar!==br)return ar-br;
+        return a.i-b.i;
+      });
+  }
+
+  const de=byOriginalOrder('de');
+  const us=byOriginalOrder('us');
   $('#shortcutSelectDe').innerHTML='<option value="">选择德国工具…</option>'+de.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+'</option>').join('');
   $('#shortcutSelectUs').innerHTML='<option value="">选择美国工具…</option>'+us.map(x=>'<option value="'+x.i+'">'+esc(x.t.title)+'</option>').join('');
 }
