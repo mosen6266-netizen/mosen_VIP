@@ -54,7 +54,8 @@
       '.vip-flow-empty{background:#fff;border:1px dashed #cfd5df;border-radius:15px;padding:34px;text-align:center;color:#7b8495}',
       '.vip-flow-toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:#1f2937;color:#fff;padding:10px 14px;border-radius:10px;font-size:12px;font-weight:700;opacity:0;pointer-events:none;transition:.2s;z-index:100000}.vip-flow-toast.show{opacity:1;transform:translate(-50%,0)}',
       'body.vip-flow-open{overflow:hidden}',
-      '@media(max-width:780px){.vip-flow-panel{width:100vw}.vip-flow-body{grid-template-columns:1fr}.vip-flow-sidebar{display:flex;overflow:auto;border-right:0;border-bottom:1px solid #e6e9ef;padding:9px}.vip-flow-group{display:none}.vip-flow-tab{min-width:180px}.vip-flow-main{padding:13px}.vip-flow-head{padding:12px}.vip-flow-title{font-size:17px}.vip-flow-head-actions .vip-flow-action{display:none}}'
+      '.vip-flow-inline-shell{margin-top:16px;border:1px solid #e5e8ef;border-radius:16px;overflow:hidden;background:#f7f8fb}.vip-flow-inline-head{padding:12px 14px;background:#fff;border-bottom:1px solid #e6e9ef;display:flex;align-items:center;gap:10px}.vip-flow-inline-head strong{font-size:14px}.vip-flow-inline-head span{font-size:11px;color:#7a8497}.vip-flow-inline-body{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:520px}.vip-flow-inline-body .vip-flow-sidebar{position:relative;height:auto;max-height:680px}.vip-flow-inline-body .vip-flow-main{max-height:680px}',
+      '@media(max-width:780px){.vip-flow-panel{width:100vw}.vip-flow-body,.vip-flow-inline-body{grid-template-columns:1fr}.vip-flow-sidebar{display:flex;overflow:auto;border-right:0;border-bottom:1px solid #e6e9ef;padding:9px}.vip-flow-group{display:none}.vip-flow-tab{min-width:180px}.vip-flow-main{padding:13px}.vip-flow-head{padding:12px}.vip-flow-title{font-size:17px}.vip-flow-head-actions .vip-flow-action{display:none}}'
     ].join('');
     document.head.appendChild(s);
   }
@@ -454,9 +455,30 @@
     if(e.key==='Escape'&&document.getElementById('vipFlowOverlay'))closePanel();
   });
 
+  async function mountInline(container,customerId,customerName){
+    if(!container)return;
+    injectStyles();
+    currentCustomer={id:String(customerId),name:customerName||'未命名客户'};
+    container.hidden=false;
+    container.innerHTML='<section class="vip-flow-inline-shell"><div class="vip-flow-inline-head"><div><strong>维权流程</strong><br><span>'+esc(customerName||'未命名客户')+' · 当前客户独立进度</span></div></div><div class="vip-flow-inline-body"><aside class="vip-flow-sidebar" data-vip-sidebar><div class="vip-flow-empty">正在读取流程…</div></aside><main class="vip-flow-main" data-vip-main><div class="vip-flow-empty">正在读取流程内容…</div></main></div></section>';
+    try{
+      var bundle=await loadBundle();
+      var progress=await loadCloudProgress(customerId);
+      var activeId=chooseInitialFlow(bundle,progress);
+      progress.activeFlowId=activeId;
+      saveProgress(customerId,progress);
+      renderAll(container,bundle,progress,activeId);
+    }catch(e){
+      container.innerHTML='<div class="vip-flow-empty">'+esc(e&&e.message?e.message:String(e))+'</div>';
+    }
+  }
+
   window.MosenVIPWorkflow={
     open:function(customerId,customerName){
       return openPanel(customerId,customerName);
+    },
+    mount:function(container,customerId,customerName){
+      return mountInline(container,customerId,customerName);
     }
   };
 })();
