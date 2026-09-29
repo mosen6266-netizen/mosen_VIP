@@ -1132,6 +1132,7 @@ function replaceBusinessEntityRows(backup,name,rows){
   backup.entities[name]=(rows||[])
     .filter(x=>name!=='VIPActivityLog'||x.migration_duplicate!==true)
     .filter(x=>name!=='VIPCustomer'||x.duplicate_record!==true)
+    .filter(x=>name!=='VIPWorkflowFlowProgress'||(x.flow_id!=='__orphan__'&&x.customer_id))
     .map(businessBackupRow);
 }
 function mergeBusinessEntityRows(backup,name,rows){
