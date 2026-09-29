@@ -24,17 +24,24 @@ export function customerSearchFields(repUsername='', data={}){
   };
 }
 export async function ensureCustomerIndex(base44, query={}, maxRows=800){
-  let skip=0,seen=0,updated=0;
+  let seen=0,updated=0;
   while(seen<maxRows){
-    const batch=await base44.entities.VIPCustomer.filter(query,'-updated_date',Math.min(200,maxRows-seen),skip);
+    const missing={$or:[
+      {customer_name_normalized:{$exists:false}},
+      {phone_normalized:{$exists:false}},
+      {email_normalized:{$exists:false}},
+      {wallet_normalized:{$exists:false}},
+      {country_normalized:{$exists:false}}
+    ]};
+    const q=Object.keys(query||{}).length?{$and:[query,missing]}:missing;
+    const batch=await base44.entities.VIPCustomer.filter(q,'created_date',Math.min(200,maxRows-seen),0);
     const rows=Array.isArray(batch)?batch:(batch?.items||[]);
     if(!rows.length)break;
     for(const r of rows){
       const patch=customerSearchFields(r.rep_username,r.data||{});
-      const stale=Object.keys(patch).some(k=>String(r[k]??'')!==String(patch[k]??''));
-      if(stale){ try{await base44.entities.VIPCustomer.update(r.id,patch);updated++;}catch(_){} }
+      try{await base44.entities.VIPCustomer.update(r.id,patch);updated++}catch(_){}
     }
-    seen+=rows.length;if(rows.length<200)break;skip+=rows.length;
+    seen+=rows.length;if(rows.length<200)break;
   }
   return {seen,updated};
 }
