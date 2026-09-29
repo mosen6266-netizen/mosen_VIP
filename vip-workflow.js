@@ -216,11 +216,31 @@
     data.flows[flowId]={completed:Array.from(set),updatedAt:Date.now()};
   }
 
-  function groupName(flow){
-    var n=String(flow.name||'');
-    if(n.indexOf('德国')>=0)return '德国流程';
-    if(n.indexOf('美国')>=0)return '美国流程';
-    return '其他流程';
+  function flowCategoryId(flow){
+    var explicit=String(flow&&flow.category||'').trim();
+    if(explicit)return explicit;
+    var n=String(flow&&flow.name||'');
+    if(n.indexOf('美国')>=0)return 'us';
+    if(n.indexOf('德国')>=0)return 'de';
+    return 'other';
+  }
+
+  function categoryEntries(bundle){
+    var list=Array.isArray(bundle&&bundle.categories)?bundle.categories.slice():[];
+    if(!list.length){
+      list=[
+        {id:'de',name:'德国流程',order:1},
+        {id:'us',name:'美国流程',order:2}
+      ];
+    }
+    var ids=new Set(list.map(function(x){return String(x.id)}));
+    (bundle.workflows||[]).forEach(function(flow){
+      var id=flowCategoryId(flow);
+      if(ids.has(id))return;
+      ids.add(id);
+      list.push({id:id,name:id==='de'?'德国流程':id==='us'?'美国流程':id==='other'?'其他流程':id,order:list.length+1});
+    });
+    return list.sort(function(a,b){return Number(a.order||0)-Number(b.order||0)});
   }
 
   function flowStats(flow,progress){
@@ -340,14 +360,12 @@
 
   function renderSidebar(overlay,bundle,progress,activeId){
     var side=overlay.querySelector('[data-vip-sidebar]');
-    var groups={};
-    bundle.workflows.forEach(function(f){
-      var g=groupName(f);(groups[g]||(groups[g]=[])).push(f);
-    });
     var html='';
-    Object.keys(groups).forEach(function(g){
-      html+='<div class="vip-flow-group">'+esc(g)+'</div>';
-      groups[g].forEach(function(f){
+    categoryEntries(bundle).forEach(function(cat){
+      var flows=(bundle.workflows||[]).filter(function(f){return String(flowCategoryId(f))===String(cat.id)});
+      if(!flows.length)return;
+      html+='<div class="vip-flow-group">'+esc(cat.name||cat.id)+'</div>';
+      flows.forEach(function(f){
         var st=flowStats(f,progress);
         html+='<button type="button" class="vip-flow-tab '+(String(f.id)===String(activeId)?'active':'')+'" data-vip-flow-id="'+esc(f.id)+'"><strong>'+esc(f.name)+'</strong><span>已发送 '+st.completed+' / '+st.total+' · '+st.percent+'%</span></button>';
       });
