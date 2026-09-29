@@ -86,8 +86,17 @@
     return OLD_BASE+String(path).replace(/^\.\.\//,'').replace(/^\.\//,'');
   }
 
-  async function loadBundle(){
-    if(flowBundle)return flowBundle;
+  async function loadBundle(force){
+    if(flowBundle&&!force)return flowBundle;
+    try{
+      var base44=await getBase44();
+      var result=await base44.entities.VIPWorkflowDefinition.filter({key:'main'},'-updated_date',1,0);
+      var rows=Array.isArray(result)?result:(result&&result.items)||[];
+      if(rows[0]&&rows[0].bundle&&Array.isArray(rows[0].bundle.workflows)){
+        flowBundle=rows[0].bundle;
+        return flowBundle;
+      }
+    }catch(e){}
     var res=await fetch(DATA_URL,{cache:'no-store'});
     if(!res.ok)throw new Error('无法读取维权流程数据');
     flowBundle=await res.json();
@@ -283,10 +292,22 @@
 
   function chooseInitialFlow(bundle,progress){
     var last=progress.activeFlowId;
-    if(last&&bundle.workflows.some(function(f){return String(f.id)===String(last);}))return String(last);
+    var lastFlow=last&&bundle.workflows.find(function(f){return String(f.id)===String(last);});
+    if(lastFlow){
+      var lastStats=flowStats(lastFlow,progress);
+      if(lastStats.completed>0&&lastStats.completed<lastStats.total)return String(lastFlow.id);
+    }
     for(var i=0;i<bundle.workflows.length;i++){
       var st=flowStats(bundle.workflows[i],progress);
       if(st.completed>0&&st.completed<st.total)return String(bundle.workflows[i].id);
+    }
+    if(lastFlow){
+      var ls=flowStats(lastFlow,progress);
+      if(ls.completed<ls.total)return String(lastFlow.id);
+    }
+    for(var j=0;j<bundle.workflows.length;j++){
+      var s2=flowStats(bundle.workflows[j],progress);
+      if(s2.completed<s2.total)return String(bundle.workflows[j].id);
     }
     return bundle.workflows[0]?String(bundle.workflows[0].id):'';
   }
@@ -310,7 +331,7 @@
       btn.addEventListener('click',function(){
         progress.activeFlowId=btn.dataset.vipFlowId;
         saveProgress(currentCustomer.id,progress);
-        renderAll(overlay,bundle,progress,btn.dataset.vipFlowId);
+        renderAll(overlay,bundle,progress,btn.dataset.vipFlowId,true);
       });
     });
   }
@@ -427,22 +448,35 @@
     });
   }
 
-  function renderAll(overlay,bundle,progress,activeId){
+  function locateCurrentStep(overlay,behavior){
+    setTimeout(function(){
+      var main=overlay.querySelector('[data-vip-main]');
+      if(!main)return;
+      var el=main.querySelector('.vip-flow-step.next');
+      if(!el){main.scrollTop=0;return;}
+      var mainBox=main.getBoundingClientRect(),elBox=el.getBoundingClientRect();
+      var target=main.scrollTop+(elBox.top-mainBox.top)-105;
+      try{main.scrollTo({top:Math.max(0,target),behavior:behavior||'auto'});}catch(e){main.scrollTop=Math.max(0,target);}
+    },50);
+  }
+
+  function renderAll(overlay,bundle,progress,activeId,autoLocate){
     renderSidebar(overlay,bundle,progress,activeId);
     renderFlow(overlay,bundle,progress,activeId);
+    if(autoLocate)locateCurrentStep(overlay,'auto');
   }
 
   async function openPanel(customerId,customerName){
     injectStyles();
     var overlay=createShell(customerId,customerName);
     try{
-      var bundle=await loadBundle();
+      var bundle=await loadBundle(true);
       if(!document.body.contains(overlay))return;
       var progress=await loadCloudProgress(customerId);
       var activeId=chooseInitialFlow(bundle,progress);
       progress.activeFlowId=activeId;
       saveProgress(customerId,progress);
-      renderAll(overlay,bundle,progress,activeId);
+      renderAll(overlay,bundle,progress,activeId,true);
     }catch(e){
       var side=overlay.querySelector('[data-vip-sidebar]');
       var main=overlay.querySelector('[data-vip-main]');
@@ -462,12 +496,12 @@
     container.hidden=false;
     container.innerHTML='<section class="vip-flow-inline-shell"><div class="vip-flow-inline-head"><div><strong>维权流程</strong><br><span>'+esc(customerName||'未命名客户')+' · 当前客户独立进度</span></div></div><div class="vip-flow-inline-body"><aside class="vip-flow-sidebar" data-vip-sidebar><div class="vip-flow-empty">正在读取流程…</div></aside><main class="vip-flow-main" data-vip-main><div class="vip-flow-empty">正在读取流程内容…</div></main></div></section>';
     try{
-      var bundle=await loadBundle();
+      var bundle=await loadBundle(true);
       var progress=await loadCloudProgress(customerId);
       var activeId=chooseInitialFlow(bundle,progress);
       progress.activeFlowId=activeId;
       saveProgress(customerId,progress);
-      renderAll(container,bundle,progress,activeId);
+      renderAll(container,bundle,progress,activeId,true);
     }catch(e){
       container.innerHTML='<div class="vip-flow-empty">'+esc(e&&e.message?e.message:String(e))+'</div>';
     }
