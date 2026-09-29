@@ -126,16 +126,16 @@
       <section id="view-backup" class="admin-view" hidden>
         <div class="card">
           <div class="section-title"><div class="dot"></div><h2>系统完整备份 / 恢复</h2><div class="spacer"></div><span class="pill">一键迁移全部数据和设置</span></div>
-          <div class="backup-intro">V3 完整备份包含：全部业务员、登记字段与类型/顺序/下拉选项、客户进度与顺序、全部动态客户资料、每个客户已完成进度、操作日志。导出带完整性校验码；导入前先校验并自动下载当前系统安全备份。</div>
+          <div class="backup-intro">V4 完整系统备份包含：全部业务员、登记字段与分栏/类型/顺序/选项、客户进度、全部客户资料与归档/重点状态、操作日志、全部话术与分类、每个客户的话术完成进度，以及 VIP 工具中心全部工具、模板、排序和访问配置。恢复前会自动再导出一份当前系统安全备份。</div>
           <div class="backup-actions">
-            <button id="exportBackup" class="btn primary">导出完整备份</button>
-            <button id="importBackup" class="btn soft">导入备份并恢复</button>
+            <button id="exportBackup" class="btn primary">导出完整系统备份</button>
+            <button id="importBackup" class="btn soft">导入完整备份并恢复</button>
             <input id="backupFile" type="file" accept=".json,application/json" hidden>
           </div>
           <div style="margin-top:14px;padding-top:14px;border-top:1px solid #eef1f5">
             <button id="openVipToolCenterBackup" class="btn soft" type="button" style="min-width:180px">打开 VIP 工具中心 ↗</button>
           </div>
-          <div class="notice warn" style="margin-top:16px">导入恢复会清空当前系统的数据，然后按备份文件重建。请只导入本系统导出的备份文件。</div>
+          <div class="notice warn" style="margin-top:16px">完整恢复会重建当前云端数据，并把 VIP 工具中心恢复到备份当时的文件、模板、分类和排序。请只导入本系统导出的完整备份文件。</div>
           <div id="backupNote" class="notice" hidden></div>
         </div>
       </section>
@@ -626,79 +626,168 @@ async function loadLogs(){
     box.innerHTML='<div class="activity-list">'+rows.map(x=>'<div class="activity-item"><div class="activity-time">'+esc(localLogTime(x.event_time||x.created_date))+'</div><div class="activity-body"><div class="activity-title">'+esc(x.message||'')+'</div><div class="activity-meta">'+esc(x.actor_display_name||x.actor_username||'未知业务员')+(x.customer_name?' · '+esc(x.customer_name):'')+(x.target_label?' · '+esc(x.target_label):'')+'</div></div></div>').join('')+'</div>';
   }catch(err){box.innerHTML='<div class="notice err">读取日志失败：'+esc(err?.message||String(err))+'</div>'}
 }
+const FULL_BACKUP_FORMAT='MOSEN_VIP_FULL_BACKUP';
+const FULL_BACKUP_VERSION=4;
+const VIP_REPO_OWNER='mosen6266-netizen';
+const VIP_REPO_NAME='mosen_VIP';
+const VIP_REPO_BRANCH='main';
+const BACKUP_ENTITY_NAMES=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPActivityLog','VIPWorkflowDefinition','VIPWorkflowProgress'];
+
 async function getAllEntityRecords(entityName){
   const all=[];let skip=0;
   while(true){
     const part=unwrap(await base44.entities[entityName].list({sort:'created_date',limit:500,skip}));
-    all.push(...part);if(part.length<500)break;skip+=500;
+    all.push(...part);
+    if(part.length<500)break;
+    skip+=500;
+    if(skip>50000)throw new Error(entityName+' 数据量异常，已停止备份');
   }
   return all;
 }
-function stripRecord(entityName,row){
-  const common={};
-  const copy=(keys)=>keys.forEach(k=>{if(row[k]!==undefined)common[k]=row[k]});
-  if(entityName==='SalesRep')copy(['username','display_name']);
-  if(entityName==='FormField')copy(['label','field_key','field_type','options','required','order','active','group_name']);
-  if(entityName==='ProgressStage')copy(['label','order','active']);
-  if(entityName==='Customer')copy(['rep_username','data','completed_progress_ids','archived','archived_at','archived_by_username','archived_by_display_name','archived_by_type','archive_reason','starred','admin_sort_score']);
-  if(entityName==='ActivityLog')copy(['actor_username','actor_display_name','actor_type','action_type','customer_id','customer_name','target_key','target_label','old_value','new_value','message','event_time','metadata']);
-  return common;
+
+function stripSystemFields(row){
+  const x={...row};
+  ['id','created_date','updated_date','created_by_id','is_sample'].forEach(k=>delete x[k]);
+  return x;
 }
+function backupRow(row){return {...stripSystemFields(row),__old_id:row.id}}
+
 async function collectBackupEntities(){
-  const [salesReps,formFields,progressStagesData,customerData,logsData]=await Promise.all([
-    getAllEntityRecords('SalesRep'),getAllEntityRecords('FormField'),getAllEntityRecords('ProgressStage'),getAllEntityRecords('Customer'),getAllEntityRecords('ActivityLog')
-  ]);
+  const rows=await Promise.all(BACKUP_ENTITY_NAMES.map(name=>getAllEntityRecords(name)));
   return {
-    SalesRep:salesReps.map(x=>({...stripRecord('SalesRep',x),__old_id:x.id})),
-    FormField:formFields.map(x=>({...stripRecord('FormField',x),__old_id:x.id})),
-    ProgressStage:progressStagesData.map(x=>({...stripRecord('ProgressStage',x),__old_id:x.id})),
-    Customer:customerData.map(x=>({...stripRecord('Customer',x),__old_id:x.id})),
-    ActivityLog:logsData.map(x=>({...stripRecord('ActivityLog',x),__old_id:x.id}))
+    VIPSalesRep:rows[0].map(backupRow),
+    VIPFormField:rows[1].map(backupRow),
+    VIPProgressStage:rows[2].map(backupRow),
+    VIPCustomer:rows[3].map(backupRow),
+    VIPActivityLog:rows[4].map(backupRow),
+    VIPWorkflowDefinition:rows[5].map(backupRow),
+    VIPWorkflowProgress:rows[6].map(backupRow)
   };
 }
-function backupCounts(entities){
+
+function backupCounts(entities,repository){
   return {
-    sales_reps:(entities.SalesRep||[]).length,
-    form_fields:(entities.FormField||[]).length,
-    progress_stages:(entities.ProgressStage||[]).length,
-    customers:(entities.Customer||[]).length,
-    activity_logs:(entities.ActivityLog||[]).length
+    sales_reps:(entities.VIPSalesRep||entities.SalesRep||[]).length,
+    form_fields:(entities.VIPFormField||entities.FormField||[]).length,
+    progress_stages:(entities.VIPProgressStage||entities.ProgressStage||[]).length,
+    customers:(entities.VIPCustomer||entities.Customer||[]).length,
+    activity_logs:(entities.VIPActivityLog||entities.ActivityLog||[]).length,
+    workflow_definitions:(entities.VIPWorkflowDefinition||[]).length,
+    workflow_progress:(entities.VIPWorkflowProgress||[]).length,
+    toolbox_files:(repository?.toolbox_files||[]).length
   };
 }
-async function makeBackupObject(){
+
+function bytesToBase64(bytes){
+  let out='';
+  const step=0x8000;
+  for(let i=0;i<bytes.length;i+=step)out+=String.fromCharCode(...bytes.subarray(i,Math.min(i+step,bytes.length)));
+  return btoa(out);
+}
+function base64ToBytes(base64){
+  const bin=atob(base64),out=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);
+  return out;
+}
+
+async function githubPublicJson(path){
+  const r=await fetch('https://api.github.com/repos/'+VIP_REPO_OWNER+'/'+VIP_REPO_NAME+path,{headers:{Accept:'application/vnd.github+json'},cache:'no-store'});
+  if(!r.ok)throw new Error('读取 GitHub 仓库失败：HTTP '+r.status);
+  return r.json();
+}
+async function collectToolboxSnapshot(note){
+  if(note)showMessage(note,'正在备份工具中心全部工具、模板、排序和配置…','warn');
+  const tree=await githubPublicJson('/git/trees/'+encodeURIComponent(VIP_REPO_BRANCH)+'?recursive=1');
+  const files=(tree.tree||[]).filter(x=>x.type==='blob'&&String(x.path||'').startsWith('toolbox/')).map(x=>({path:x.path,size:x.size||0,sha:x.sha||''}));
+  const result=new Array(files.length);
+  let next=0,done=0;
+  async function worker(){
+    while(true){
+      const idx=next++;if(idx>=files.length)return;
+      const file=files[idx];
+      const raw='https://raw.githubusercontent.com/'+VIP_REPO_OWNER+'/'+VIP_REPO_NAME+'/'+VIP_REPO_BRANCH+'/'+file.path.split('/').map(encodeURIComponent).join('/');
+      const r=await fetch(raw+'?v='+Date.now(),{cache:'no-store'});
+      if(!r.ok)throw new Error('读取工具中心文件失败：'+file.path+'（HTTP '+r.status+'）');
+      const bytes=new Uint8Array(await r.arrayBuffer());
+      result[idx]={path:file.path,mode:'100644',size:bytes.length,sha:file.sha,encoding:'base64',content:bytesToBase64(bytes)};
+      done++;
+      if(note&&done%8===0)showMessage(note,'正在备份工具中心文件 '+done+' / '+files.length+'…','warn');
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(5,Math.max(1,files.length))},()=>worker()));
+  return {
+    owner:VIP_REPO_OWNER,
+    repo:VIP_REPO_NAME,
+    branch:VIP_REPO_BRANCH,
+    captured_at:new Date().toISOString(),
+    toolbox_files:result
+  };
+}
+
+async function makeBackupObject(note){
+  if(note)showMessage(note,'正在读取全部客户、业务员、登记字段、进度、日志和话术数据…','warn');
   const entities=await collectBackupEntities();
-  const checksum=await sha256(JSON.stringify(entities));
+  const repository=await collectToolboxSnapshot(note);
+  const payload={entities,repository};
+  const checksum=await sha256(JSON.stringify(payload));
   return {
-    format:'MOSEN717_FULL_BACKUP',
-    version:3,
+    format:FULL_BACKUP_FORMAT,
+    version:FULL_BACKUP_VERSION,
     exported_at:new Date().toISOString(),
     checksum_sha256:checksum,
-    counts:backupCounts(entities),
+    counts:backupCounts(entities,repository),
     compatibility:{
+      standalone_vip:true,
+      includes_all_cloud_entities:true,
+      includes_workflow_definitions:true,
+      includes_per_customer_workflow_progress:true,
+      includes_toolbox_files:true,
+      includes_tool_order:true,
+      includes_tool_access_config:true,
+      includes_templates:true,
       supports_dynamic_fields:true,
       supports_date_and_datetime:true,
-      datetime_storage:'YYYY-MM-DDTHH:mm',
       supports_select_options:true,
       supports_progress_mapping:true,
       supports_activity_logs:true,
       supports_field_groups:true
     },
-    entities
+    entities,
+    repository
   };
 }
+
 function downloadBackupObject(backup,filename){
-  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();URL.revokeObjectURL(a.href);a.remove();
+  const blob=new Blob([JSON.stringify(backup)],{type:'application/json;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),3000);
 }
+
 async function exportFullBackup(){
-  const note=document.getElementById('backupNote');showMessage(note,'正在读取并校验全部系统数据…');
+  const note=document.getElementById('backupNote');
   try{
-    const backup=await makeBackupObject();
-    downloadBackupObject(backup,'mosen717-完整备份-V2-'+new Date().toISOString().slice(0,10)+'.json');
+    const backup=await makeBackupObject(note);
+    downloadBackupObject(backup,'mosen_VIP-完整系统备份-V4-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json');
     const n=backup.counts;
-    showMessage(note,'完整备份已导出并生成校验码：业务员 '+n.sales_reps+'、登记字段 '+n.form_fields+'、进度 '+n.progress_stages+'、客户 '+n.customers+'、日志 '+n.activity_logs+'。','ok');
-  }catch(err){showMessage(note,'备份失败：'+(err?.message||String(err)),'err')}
+    showMessage(note,
+      '完整备份已导出：业务员 '+n.sales_reps+
+      '、登记字段 '+n.form_fields+
+      '、客户进度 '+n.progress_stages+
+      '、客户 '+n.customers+
+      '、日志 '+n.activity_logs+
+      '、话术配置 '+n.workflow_definitions+
+      '、客户话术进度 '+n.workflow_progress+
+      '、工具中心文件 '+n.toolbox_files+'。已生成完整性校验码。',
+      'ok'
+    );
+  }catch(err){
+    showMessage(note,'备份失败：'+(err?.message||String(err)),'err');
+  }
 }
+
 async function wipeEntity(entityName){
   while(true){
     const rows=unwrap(await base44.entities[entityName].list({limit:500}));
@@ -711,61 +800,86 @@ function createdId(result){
   return result?.id||result?.data?.id||result?.entity?.id||
     result?.[0]?.id||result?.items?.[0]?.id||result?.data?.[0]?.id||'';
 }
+function normalizeLegacyEntities(e){
+  if(e.VIPSalesRep)return e;
+  return {
+    VIPSalesRep:e.SalesRep||[],
+    VIPFormField:e.FormField||[],
+    VIPProgressStage:e.ProgressStage||[],
+    VIPCustomer:e.Customer||[],
+    VIPActivityLog:e.ActivityLog||[],
+    VIPWorkflowDefinition:e.VIPWorkflowDefinition||[],
+    VIPWorkflowProgress:e.VIPWorkflowProgress||[]
+  };
+}
+
 function validateBackupStructure(raw){
-  if(raw?.format!=='MOSEN717_FULL_BACKUP'||!raw?.entities)throw new Error('这不是有效的 mosen717 完整备份文件');
-  const e=raw.entities;
-  for(const name of ['SalesRep','FormField','ProgressStage','Customer','ActivityLog']){
+  const isV4=raw?.format===FULL_BACKUP_FORMAT&&Number(raw?.version)>=4;
+  const isLegacy=raw?.format==='MOSEN717_FULL_BACKUP'&&raw?.entities;
+  if(!isV4&&!isLegacy)throw new Error('这不是有效的 MOSEN VIP 完整备份文件');
+
+  const e=normalizeLegacyEntities(raw.entities||{});
+  for(const name of ['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPActivityLog']){
     if(!Array.isArray(e[name]))throw new Error('备份文件缺少 '+name+' 数据表');
   }
+  if(isV4){
+    if(!Array.isArray(e.VIPWorkflowDefinition))throw new Error('备份缺少话术定义');
+    if(!Array.isArray(e.VIPWorkflowProgress))throw new Error('备份缺少客户话术进度');
+    if(!Array.isArray(raw.repository?.toolbox_files))throw new Error('备份缺少工具中心文件');
+  }
+
   const allowedTypes=new Set(['text','number','date','datetime','email','tel','textarea','select']);
   const fieldKeys=new Set();
-  for(const f of e.FormField){
+  for(const f of e.VIPFormField){
     if(!f.field_key)throw new Error('存在缺少 field_key 的登记字段');
     if(fieldKeys.has(String(f.field_key)))throw new Error('登记字段 key 重复：'+f.field_key);
     fieldKeys.add(String(f.field_key));
     if(!allowedTypes.has(String(f.field_type||'')))throw new Error('不支持的字段类型：'+String(f.field_type));
-    if(f.field_type==='select'&&f.options!=null&&typeof f.options!=='string')throw new Error('下拉字段选项格式不正确：'+String(f.label||f.field_key));
   }
-  for(const p of e.ProgressStage){
+  for(const p of e.VIPProgressStage){
     if(!p.__old_id)throw new Error('客户进度缺少原始 ID，无法安全恢复勾选关系');
   }
-  for(const cust of e.Customer){
+  for(const cust of e.VIPCustomer){
     if(cust.data!=null&&(typeof cust.data!=='object'||Array.isArray(cust.data)))throw new Error('客户动态资料格式不正确');
     if(cust.completed_progress_ids!=null&&!Array.isArray(cust.completed_progress_ids))throw new Error('客户进度勾选数据格式不正确');
   }
-  return true;
+  return {isV4,entities:e};
 }
+
 async function validateBackupChecksum(raw){
-  if(Number(raw.version||1)>=2){
-    if(!raw.checksum_sha256)throw new Error('V2 备份缺少完整性校验码');
+  const version=Number(raw.version||1);
+  if(version>=4&&raw.format===FULL_BACKUP_FORMAT){
+    if(!raw.checksum_sha256)throw new Error('V4 备份缺少完整性校验码');
+    const actual=await sha256(JSON.stringify({entities:raw.entities,repository:raw.repository}));
+    if(actual!==raw.checksum_sha256)throw new Error('备份完整性校验失败：文件可能已损坏或被修改');
+  }else if(version>=2){
+    if(!raw.checksum_sha256)throw new Error('旧版备份缺少完整性校验码');
     const actual=await sha256(JSON.stringify(raw.entities));
-    if(actual!==raw.checksum_sha256)throw new Error('备份文件校验失败：文件可能已损坏或被修改');
-    const expected=raw.counts||{};
-    const actualCounts=backupCounts(raw.entities);
-    for(const [k,v] of Object.entries(expected)){
-      if(Number(v)!==Number(actualCounts[k]))throw new Error('备份数量校验失败：'+k);
-    }
+    if(actual!==raw.checksum_sha256)throw new Error('备份完整性校验失败：文件可能已损坏或被修改');
   }
 }
+
 async function restoreEntities(entities){
-  for(const row of entities.SalesRep||[])await base44.entities.VIPSalesRep.create(withoutOldId(row));
-  for(const row of entities.FormField||[])await base44.entities.VIPFormField.create(withoutOldId(row));
+  const e=normalizeLegacyEntities(entities);
 
-  const progressRows=entities.ProgressStage||[];
-  for(const row of progressRows)await base44.entities.VIPProgressStage.create(withoutOldId(row));
+  for(const row of e.VIPSalesRep||[])await base44.entities.VIPSalesRep.create(withoutOldId(row));
+  for(const row of e.VIPFormField||[])await base44.entities.VIPFormField.create(withoutOldId(row));
 
-  // Do not rely only on create() return shape. Re-read all restored progress rows and map by sorted backup order.
-  const restoredProgress=unwrap(await base44.entities.VIPProgressStage.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
-  const sortedBackupProgress=[...progressRows].sort((a,b)=>(a.order||0)-(b.order||0));
   const progressMap={};
-  for(let i=0;i<sortedBackupProgress.length;i++){
-    const old=sortedBackupProgress[i]?.__old_id,newRow=restoredProgress[i];
-    if(old&&newRow?.id)progressMap[String(old)]=String(newRow.id);
+  for(const row of e.VIPProgressStage||[]){
+    const old=row.__old_id;
+    const created=await base44.entities.VIPProgressStage.create(withoutOldId(row));
+    const id=createdId(created);
+    if(old&&id)progressMap[String(old)]=String(id);
   }
-  if(sortedBackupProgress.length!==restoredProgress.length)throw new Error('客户进度恢复数量不一致');
+  if(Object.keys(progressMap).length!==(e.VIPProgressStage||[]).length){
+    const restored=unwrap(await base44.entities.VIPProgressStage.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
+    const original=[...(e.VIPProgressStage||[])].sort((a,b)=>(a.order||0)-(b.order||0));
+    original.forEach((row,i)=>{if(row.__old_id&&restored[i]?.id)progressMap[String(row.__old_id)]=String(restored[i].id)});
+  }
 
   const customerMap={};
-  for(const row of entities.Customer||[]){
+  for(const row of e.VIPCustomer||[]){
     const old=row.__old_id,clean=withoutOldId(row);
     clean.data=(clean.data&&typeof clean.data==='object')?clean.data:{};
     clean.completed_progress_ids=(clean.completed_progress_ids||[]).map(id=>progressMap[String(id)]||'').filter(Boolean);
@@ -774,44 +888,153 @@ async function restoreEntities(entities){
     if(old&&cid)customerMap[String(old)]=String(cid);
   }
 
-  for(const row of entities.ActivityLog||[]){
+  for(const row of e.VIPActivityLog||[]){
     const clean=withoutOldId(row);
     if(clean.customer_id&&customerMap[String(clean.customer_id)])clean.customer_id=customerMap[String(clean.customer_id)];
     if(clean.action_type?.startsWith('progress_')&&clean.target_key&&progressMap[String(clean.target_key)])clean.target_key=progressMap[String(clean.target_key)];
     await base44.entities.VIPActivityLog.create(clean);
   }
+
+  for(const row of e.VIPWorkflowDefinition||[]){
+    await base44.entities.VIPWorkflowDefinition.create(withoutOldId(row));
+  }
+
+  for(const row of e.VIPWorkflowProgress||[]){
+    const clean=withoutOldId(row);
+    if(clean.customer_id&&customerMap[String(clean.customer_id)])clean.customer_id=customerMap[String(clean.customer_id)];
+    await base44.entities.VIPWorkflowProgress.create(clean);
+  }
 }
+
+async function githubWrite(path,token,options={}){
+  const r=await fetch('https://api.github.com/repos/'+VIP_REPO_OWNER+'/'+VIP_REPO_NAME+path,{
+    ...options,
+    headers:{
+      Accept:'application/vnd.github+json',
+      Authorization:'Bearer '+token,
+      'X-GitHub-Api-Version':'2022-11-28',
+      ...(options.headers||{})
+    }
+  });
+  if(!r.ok){
+    let msg='HTTP '+r.status;
+    try{const j=await r.json();if(j?.message)msg=j.message}catch(_){}
+    throw new Error('GitHub 操作失败：'+msg);
+  }
+  return r.status===204?null:r.json();
+}
+async function requestRestoreToken(){
+  const token=await uiPrompt(
+    '完整恢复还需要把工具中心文件恢复到 mosen_VIP 仓库。请输入对 mosen_VIP 具有 Contents: Read and write 权限的 Fine-grained GitHub Token。Token 只用于这次恢复，不会保存。',
+    {title:'GitHub 恢复授权',placeholder:'github_pat_…',confirmText:'验证并继续',textarea:false}
+  );
+  if(!token||!token.trim())return null;
+  await githubWrite('',token.trim(),{method:'GET'});
+  return token.trim();
+}
+async function restoreToolboxSnapshot(repository,token,note){
+  const files=repository?.toolbox_files||[];
+  if(!files.length)throw new Error('备份中没有工具中心文件');
+
+  if(note)showMessage(note,'正在恢复工具中心文件，请不要关闭页面…','warn');
+
+  const ref=await githubWrite('/git/ref/heads/'+encodeURIComponent(VIP_REPO_BRANCH),token,{method:'GET'});
+  const headSha=ref.object?.sha;
+  const commit=await githubWrite('/git/commits/'+headSha,token,{method:'GET'});
+  const baseTree=commit.tree?.sha;
+  const currentTree=await githubWrite('/git/trees/'+baseTree+'?recursive=1',token,{method:'GET'});
+  const currentToolbox=(currentTree.tree||[]).filter(x=>x.type==='blob'&&String(x.path||'').startsWith('toolbox/')).map(x=>x.path);
+  const backupPaths=new Set(files.map(x=>x.path));
+
+  let done=0;
+  const entries=[];
+  for(const file of files){
+    const blob=await githubWrite('/git/blobs',token,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({content:file.content,encoding:'base64'})
+    });
+    entries.push({path:file.path,mode:file.mode||'100644',type:'blob',sha:blob.sha});
+    done++;
+    if(note&&done%8===0)showMessage(note,'正在恢复工具中心文件 '+done+' / '+files.length+'…','warn');
+  }
+  currentToolbox.filter(p=>!backupPaths.has(p)).forEach(path=>entries.push({path,mode:'100644',type:'blob',sha:null}));
+
+  const tree=await githubWrite('/git/trees',token,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({base_tree:baseTree,tree:entries})
+  });
+  const newCommit=await githubWrite('/git/commits',token,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      message:'Restore MOSEN VIP toolbox from full system backup',
+      tree:tree.sha,
+      parents:[headSha]
+    })
+  });
+  await githubWrite('/git/refs/heads/'+encodeURIComponent(VIP_REPO_BRANCH),token,{
+    method:'PATCH',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({sha:newCommit.sha,force:false})
+  });
+}
+
 async function importFullBackup(file){
   const note=document.getElementById('backupNote');
   try{
-    showMessage(note,'正在检查备份文件完整性…');
+    showMessage(note,'正在检查备份文件完整性…','warn');
     const raw=JSON.parse(await file.text());
-    validateBackupStructure(raw);
+    const info=validateBackupStructure(raw);
     await validateBackupChecksum(raw);
+    const entities=info.entities;
+    const counts=backupCounts(entities,raw.repository);
 
-    const c=backupCounts(raw.entities);
-    const version=Number(raw.version||1);
+    let token=null;
+    if(info.isV4){
+      token=await requestRestoreToken();
+      if(!token){showMessage(note,'已取消恢复：未提供 GitHub 恢复授权。','warn');return}
+    }
+
     const ok=await uiConfirm(
-      '备份文件校验通过（V'+version+'）。\n\n'+
-      '业务员：'+c.sales_reps+'\n登记字段：'+c.form_fields+'\n客户进度：'+c.progress_stages+'\n客户：'+c.customers+'\n日志：'+c.activity_logs+
-      '\n\n继续后会先自动下载一份当前系统的安全备份，然后清空当前数据并恢复。',
-      {title:'恢复系统备份',confirmText:'开始恢复',danger:true}
+      '备份文件校验通过（V'+Number(raw.version||1)+'）。\n\n'+
+      '业务员：'+counts.sales_reps+
+      '\n登记字段：'+counts.form_fields+
+      '\n客户进度：'+counts.progress_stages+
+      '\n客户：'+counts.customers+
+      '\n日志：'+counts.activity_logs+
+      '\n话术配置：'+counts.workflow_definitions+
+      '\n客户话术进度：'+counts.workflow_progress+
+      '\n工具中心文件：'+counts.toolbox_files+
+      '\n\n继续后会先自动导出当前系统的完整安全备份，然后恢复全部数据和工具中心。',
+      {title:'完整恢复 MOSEN VIP',confirmText:'开始完整恢复',danger:true}
     );
     if(!ok)return;
 
-    // Safety snapshot before destructive restore.
-    showMessage(note,'正在生成导入前安全备份…','warn');
-    const safety=await makeBackupObject();
-    downloadBackupObject(safety,'mosen717-导入前安全备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json');
+    showMessage(note,'正在生成恢复前完整安全备份…','warn');
+    const safety=await makeBackupObject(note);
+    downloadBackupObject(safety,'mosen_VIP-恢复前安全备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json');
 
-    showMessage(note,'备份文件已验证，正在恢复，请不要关闭页面…','warn');
-    for(const name of ['ActivityLog','Customer','ProgressStage','FormField','SalesRep'])await wipeEntity(name);
-    await restoreEntities(raw.entities);
+    showMessage(note,'正在清理并恢复全部云端数据，请不要关闭页面…','warn');
+    for(const name of ['VIPActivityLog','VIPWorkflowProgress','VIPWorkflowDefinition','VIPCustomer','VIPProgressStage','VIPFormField','VIPSalesRep']){
+      await wipeEntity(name);
+    }
+    await restoreEntities(entities);
 
-    await Promise.all([loadReps(),loadFields(),loadProgress(),loadCustomers(),loadLogs()]);
-    showMessage(note,'恢复完成并已通过结构校验。日期/日期时间、动态字段、下拉选项和客户进度关系均已恢复。','ok');
+    if(info.isV4){
+      await restoreToolboxSnapshot(raw.repository,token,note);
+    }
+
+    await Promise.all([loadReps(),loadFields(),loadProgress(),loadCustomers(),loadLogs(),refreshCustomerCounts()]);
+    showMessage(note,
+      info.isV4
+        ?'完整恢复成功：客户资料、业务员、登记字段、进度、日志、话术、分类、每个客户的话术进度，以及工具中心全部文件/模板/排序/访问配置均已恢复。GitHub Pages 会自动重新部署。'
+        :'旧版备份数据恢复完成。旧版备份不包含独立 VIP 工具中心文件和话术云端数据。',
+      'ok'
+    );
   }catch(err){
-    showMessage(note,'导入未完成：'+(err?.message||String(err))+'。如果已经进入恢复阶段，请使用刚才自动下载的“导入前安全备份”恢复。','err')
+    showMessage(note,'恢复未完成：'+(err?.message||String(err))+'。如已进入恢复阶段，请使用刚刚自动下载的“恢复前安全备份”再次恢复。','err');
   }
 }
 
