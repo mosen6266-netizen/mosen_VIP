@@ -34,7 +34,7 @@
 </form><div id="formNote" class="notice" hidden></div></div></div>
 
 <script type="module">
-import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, uiAlert, uiConfirm, uiPrompt } from './base44.js?v=20260929-standalone-34';
+import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, uiAlert, uiConfirm, uiPrompt, localDateKey, buildCustomerSearchText, readDashboardStat, adjustDashboardStat, createEntityBatch } from './base44.js';
 let username=localStorage.getItem('mVIP_rep_username')||'',displayName=localStorage.getItem('mVIP_rep_display_name')||'',fields=[],customers=[],progressStages=[],editingId=null;
 const CUSTOMER_PAGE_SIZE=50;
 let customerPage=1,customerHasNext=false,myCustomerTotal=0,myArchivedTotal=0,myTodayTotal=0,customerCountTimer=null;
@@ -49,12 +49,51 @@ async function boot(){
     if(!rep){localStorage.removeItem('mVIP_rep_username');location.href='./login.html';return}
     displayName=rep.display_name||rep.username;document.getElementById('who').textContent=displayName;document.getElementById('repLabel').textContent=username;
     await Promise.all([loadFields(),loadProgress(),refreshMyCustomerCounts(),loadCustomers({resetPage:true})]);
-    try{base44.entities.VIPFormField.subscribe(()=>loadFields());base44.entities.VIPProgressStage.subscribe(()=>{loadProgress();loadCustomers()});base44.entities.VIPCustomer.subscribe(()=>{loadCustomers();scheduleMyCustomerCountRefresh()});base44.entities.VIPSalesRep.subscribe(()=>verifyRep())}catch(_){}
+    try{
+      let fieldTimer=0,progressTimer=0,customerTimer=0,repTimer=0;
+      base44.entities.VIPFormField.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(fieldTimer);fieldTimer=setTimeout(()=>loadFields(),450)});
+      base44.entities.VIPProgressStage.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(progressTimer);progressTimer=setTimeout(()=>{loadProgress();loadCustomers()},500)});
+      base44.entities.VIPCustomer.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(customerTimer);customerTimer=setTimeout(()=>loadCustomers(),500);scheduleMyCustomerCountRefresh()});
+      base44.entities.VIPDashboardStats.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;scheduleMyCustomerCountRefresh()});
+      base44.entities.VIPSalesRep.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(repTimer);repTimer=setTimeout(()=>verifyRep(),500)});
+    }catch(_){}
+    ensureSearchIndex().catch(()=>{});
   }catch(_){location.href='./login.html'}
 }
 async function verifyRep(){const reps=unwrap(await base44.entities.VIPSalesRep.list({sort:'-created_date',limit:500}));if(!reps.some(r=>String(r.username||'').toLowerCase()===username.toLowerCase())){localStorage.removeItem('mVIP_rep_username');location.href='./login.html'}}
 async function loadFields(){fields=unwrap(await base44.entities.VIPFormField.list({sort:'order',limit:500})).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));document.getElementById('fieldCount').textContent=fields.length;renderForm()}
 async function loadProgress(){progressStages=unwrap(await base44.entities.VIPProgressStage.list({sort:'order',limit:500})).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));renderProgressChecklist();const sel=document.getElementById('salesProgressFilter');if(sel)sel.innerHTML='<option value="">全部进度</option>'+progressStages.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join('')}
+async function ensureSearchIndex(){
+  const all=[];let skip=0;
+  while(true){
+    const batch=unwrap(await base44.entities.VIPCustomer.filter({rep_username:username},'-created_date',200,skip));
+    all.push(...batch);if(batch.length<200)break;skip+=200;if(skip>5000)break;
+  }
+  const missing=all.filter(r=>String(r.search_text||'')!==buildCustomerSearchText(r.rep_username,r.data||{}));
+  let p=0;
+  async function worker(){
+    while(true){
+      const i=p++;if(i>=missing.length)return;
+      const r=missing[i];
+      try{await base44.entities.VIPCustomer.update(r.id,{search_text:buildCustomerSearchText(r.rep_username,r.data||{})})}catch(_){}
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(4,missing.length)},()=>worker()));
+}
+function regexEscape(v){return String(v||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
+function salesServerQuery(){
+  const q=salesBaseQuery();
+  const search=(document.getElementById('search')?.value||'').trim().toLowerCase();
+  const star=document.getElementById('salesStarFilter')?.value||'';
+  const progress=document.getElementById('salesProgressFilter')?.value||'';
+  const country=(document.getElementById('salesCountryFilter')?.value||'').trim().toLowerCase();
+  if(star==='1')q.starred=true;
+  if(star==='0')q.starred=false;
+  if(progress)q.completed_progress_ids={$in:[progress]};
+  const terms=[search,country].filter(Boolean).map(v=>({search_text:{$regex:regexEscape(v),$options:'i'}}));
+  if(terms.length)q.$and=terms;
+  return q;
+}
 async function fetchAllSalesCustomers(query){
   const all=[];let skip=0;
   while(true){
@@ -83,11 +122,19 @@ function matchesSalesFilters(r){
   return true;
 }
 async function refreshMyCustomerCounts(){
-  const all=await fetchAllSalesCustomers({rep_username:username});
-  const today=new Date().toISOString().slice(0,10);
-  myArchivedTotal=all.filter(x=>x.archived===true).length;
-  myCustomerTotal=all.length-myArchivedTotal;
-  myTodayTotal=all.filter(x=>x.archived!==true&&String(x.created_date||'').slice(0,10)===today).length;
+  let stat=await readDashboardStat('rep:'+username);
+  if(!stat){
+    const all=await fetchAllSalesCustomers({rep_username:username});
+    const today=localDateKey();
+    stat={
+      active_customers:all.filter(x=>x.archived!==true).length,
+      archived_customers:all.filter(x=>x.archived===true).length,
+      today_active_customers:all.filter(x=>x.archived!==true&&localDateKey(x.created_date)===today).length
+    };
+  }
+  myCustomerTotal=Number(stat.active_customers||0);
+  myArchivedTotal=Number(stat.archived_customers||0);
+  myTodayTotal=Number(stat.today_active_customers||0);
   document.getElementById('myCount').textContent=myCustomerTotal;
   document.getElementById('todayCount').textContent=myTodayTotal;
   document.getElementById('activeCustomerTabCount').textContent=myCustomerTotal;
@@ -100,10 +147,18 @@ async function loadCustomers({resetPage=false,refreshCounts=false}={}){
   if(resetPage)customerPage=1;
   try{
     if(salesFilterActive()){
-      globalCustomerRows=(await fetchAllSalesCustomers(salesBaseQuery())).filter(matchesSalesFilters);
-      const start=(customerPage-1)*CUSTOMER_PAGE_SIZE;
-      customers=globalCustomerRows.slice(start,start+CUSTOMER_PAGE_SIZE);
-      customerHasNext=start+CUSTOMER_PAGE_SIZE<globalCustomerRows.length;
+      globalCustomerRows=null;
+      const skip=(customerPage-1)*CUSTOMER_PAGE_SIZE;
+      try{
+        const rows=unwrap(await base44.entities.VIPCustomer.filter(salesServerQuery(),'-created_date',CUSTOMER_PAGE_SIZE+1,skip));
+        customerHasNext=rows.length>CUSTOMER_PAGE_SIZE;
+        customers=rows.slice(0,CUSTOMER_PAGE_SIZE);
+      }catch(_){
+        globalCustomerRows=(await fetchAllSalesCustomers(salesBaseQuery())).filter(matchesSalesFilters);
+        const start=(customerPage-1)*CUSTOMER_PAGE_SIZE;
+        customers=globalCustomerRows.slice(start,start+CUSTOMER_PAGE_SIZE);
+        customerHasNext=start+CUSTOMER_PAGE_SIZE<globalCustomerRows.length;
+      }
       if(!customers.length&&customerPage>1){customerPage--;return loadCustomers({refreshCounts})}
     }else{
       globalCustomerRows=null;
@@ -209,7 +264,7 @@ function attachSalesPreviewEditor(portal,row){
     const completed_progress_ids=[...portal.querySelectorAll('[data-preview-progress-id]:checked')].map(x=>x.dataset.previewProgressId);
     showMessage(note,'正在保存…');
     try{
-      await base44.entities.VIPCustomer.update(row.id,{rep_username:username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
+      await base44.entities.VIPCustomer.update(row.id,{rep_username:username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length,search_text:buildCustomerSearchText(username,data)});
       await logCustomerDiff(row,data,completed_progress_ids,row.id);
       row.data=data;row.completed_progress_ids=completed_progress_ids;
       showMessage(note,'已保存并同步。','ok');
@@ -244,32 +299,36 @@ function progressLabels(row){
   const nextStage=progressStages.find(p=>!s.done.has(String(p.id)));
   return {current,next:nextStage?nextStage.label:'已完成'};
 }
-async function writeSalesLog(payload){
-  try{
-    await base44.entities.VIPActivityLog.create({
-      actor_username:username,
-      actor_display_name:displayName||username,
-      actor_type:'sales',
-      action_type:payload.action_type||'update',
-      customer_id:payload.customer_id||'',
-      customer_name:payload.customer_name||'',
-      target_key:payload.target_key||'',
-      target_label:payload.target_label||'',
-      old_value:payload.old_value==null?'':String(payload.old_value),
-      new_value:payload.new_value==null?'':String(payload.new_value),
-      message:payload.message||'',
-      event_time:new Date().toISOString(),
-      metadata:payload.metadata||{}
-    });
-  }catch(_){}
+function salesLogRecord(payload){
+  const now=new Date();
+  return {
+    actor_username:username,
+    actor_display_name:displayName||username,
+    actor_type:'sales',
+    action_type:payload.action_type||'update',
+    customer_id:payload.customer_id||'',
+    customer_name:payload.customer_name||'',
+    target_key:payload.target_key||'',
+    target_label:payload.target_label||'',
+    old_value:payload.old_value==null?'':String(payload.old_value),
+    new_value:payload.new_value==null?'':String(payload.new_value),
+    message:payload.message||'',
+    event_time:now.toISOString(),
+    event_day:localDateKey(now),
+    metadata:payload.metadata||{}
+  };
 }
+async function writeSalesLogs(payloads){
+  try{await createEntityBatch(base44.entities.VIPActivityLog,(payloads||[]).map(salesLogRecord),6)}catch(_){}
+}
+async function writeSalesLog(payload){return writeSalesLogs([payload])}
 function customerNameFromData(data){return data?.f_customer_name||'未命名客户'}
 async function logCustomerDiff(oldRow,newData,newProgress,customerId){
-  const oldData=oldRow?.data||{}, name=customerNameFromData(newData);
+  const oldData=oldRow?.data||{}, name=customerNameFromData(newData),events=[];
   for(const field of fields){
     const before=oldData[field.field_key]??'',after=newData[field.field_key]??'';
     if(String(before)!==String(after)){
-      await writeSalesLog({
+      events.push({
         action_type:'field_update',customer_id:customerId,customer_name:name,
         target_key:field.field_key,target_label:field.label,old_value:before,new_value:after,
         message:(displayName||username)+' 修改了 '+name+' 的「'+field.label+'」：'+(before||'空')+' → '+(after||'空')
@@ -280,17 +339,18 @@ async function logCustomerDiff(oldRow,newData,newProgress,customerId){
   const newSet=new Set((newProgress||[]).map(String));
   for(const p of progressStages){
     const id=String(p.id),was=oldSet.has(id),now=newSet.has(id);
-    if(!was&&now) await writeSalesLog({
+    if(!was&&now)events.push({
       action_type:'progress_complete',customer_id:customerId,customer_name:name,
       target_key:id,target_label:p.label,new_value:'已完成',
       message:(displayName||username)+' 完成了 '+name+' 的客户进度「'+p.label+'」'
     });
-    if(was&&!now) await writeSalesLog({
+    if(was&&!now)events.push({
       action_type:'progress_uncheck',customer_id:customerId,customer_name:name,
       target_key:id,target_label:p.label,old_value:'已完成',new_value:'未完成',
       message:(displayName||username)+' 取消了 '+name+' 的客户进度「'+p.label+'」'
     });
   }
+  await writeSalesLogs(events);
 }
 function customerCopyText(row){
   const lines=['客户姓名：'+(fixedCustomerValue(row,'f_customer_name')||''),'业务员：'+(displayName||username)];
@@ -308,12 +368,22 @@ async function archiveSalesCustomer(row){
   if(!await uiConfirm('确定将「'+customerNameFromData(row.data)+'」移入归档吗？\n客户资料不会删除，可以随时恢复。',{title:'确认归档',confirmText:'确认归档'}))return;
   const archived_at=new Date().toISOString();
   await base44.entities.VIPCustomer.update(row.id,{archived:true,archived_at,archived_by_username:username,archived_by_display_name:displayName||username,archived_by_type:'sales',archive_reason:reason});
+  const todayDelta=localDateKey(row.created_date)===localDateKey()?-1:0;
+  await Promise.all([
+    adjustDashboardStat('global',{active_customers:-1,archived_customers:1,today_active_customers:todayDelta},{scope:'global'}),
+    adjustDashboardStat('rep:'+username,{active_customers:-1,archived_customers:1,today_active_customers:todayDelta},{scope:'rep',rep_username:username})
+  ]);
   await writeSalesLog({action_type:'customer_archive',customer_id:row.id,customer_name:customerNameFromData(row.data),message:(displayName||username)+' 将客户「'+customerNameFromData(row.data)+'」归档'+(reason?'，原因：'+reason:'')});
   await loadCustomers({refreshCounts:true});
 }
 async function restoreSalesCustomer(row){
   if(!await uiConfirm('将「'+customerNameFromData(row.data)+'」恢复到我的客户列表吗？',{title:'恢复客户',confirmText:'确认恢复'}))return;
   await base44.entities.VIPCustomer.update(row.id,{archived:false,archived_at:'',archived_by_username:'',archived_by_display_name:'',archived_by_type:'',archive_reason:''});
+  const todayDelta=localDateKey(row.created_date)===localDateKey()?1:0;
+  await Promise.all([
+    adjustDashboardStat('global',{active_customers:1,archived_customers:-1,today_active_customers:todayDelta},{scope:'global'}),
+    adjustDashboardStat('rep:'+username,{active_customers:1,archived_customers:-1,today_active_customers:todayDelta},{scope:'rep',rep_username:username})
+  ]);
   await writeSalesLog({action_type:'customer_restore',customer_id:row.id,customer_name:customerNameFromData(row.data),message:(displayName||username)+' 将客户「'+customerNameFromData(row.data)+'」从归档恢复'});
   await loadCustomers({refreshCounts:true});
 }
@@ -361,12 +431,16 @@ form.onsubmit=async e=>{
   try{
     if(startingEditingId){
       const oldRow=customers.find(x=>String(x.id)===String(startingEditingId));
-      await base44.entities.VIPCustomer.update(startingEditingId,{rep_username:username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
+      await base44.entities.VIPCustomer.update(startingEditingId,{rep_username:username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length,search_text:buildCustomerSearchText(username,data)});
       if(oldRow)await logCustomerDiff(oldRow,data,completed_progress_ids,startingEditingId);
     }else{
-      const created=await base44.entities.VIPCustomer.create({rep_username:username,data,completed_progress_ids,archived:false,starred:false,admin_sort_score:completed_progress_ids.length});
+      const created=await base44.entities.VIPCustomer.create({rep_username:username,data,completed_progress_ids,archived:false,starred:false,admin_sort_score:completed_progress_ids.length,search_text:buildCustomerSearchText(username,data)});
       const cid=created?.id||'';
       if(cid)editingId=cid;
+      await Promise.all([
+        adjustDashboardStat('global',{active_customers:1,today_active_customers:1},{scope:'global'}),
+        adjustDashboardStat('rep:'+username,{active_customers:1,today_active_customers:1},{scope:'rep',rep_username:username})
+      ]);
       await writeSalesLog({
         action_type:'customer_create',customer_id:cid,customer_name:customerNameFromData(data),
         message:(displayName||username)+' 登记了新客户「'+customerNameFromData(data)+'」',
