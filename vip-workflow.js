@@ -7,6 +7,14 @@
   var flowBundle=null;
   var currentCustomer=null;
   var observer=null;
+  var base44Promise=null;
+  var cloudRows={};
+  var cloudSaveTimers={};
+
+  function getBase44(){
+    if(!base44Promise)base44Promise=import('./base44.js').then(function(m){return m.base44});
+    return base44Promise;
+  }
 
   function esc(v){
     return String(v==null?'':v).replace(/[&<>"']/g,function(ch){
@@ -102,6 +110,57 @@
     }
   }
 
+  async function loadCloudProgress(customerId){
+    var local=loadProgress(customerId);
+    try{
+      var base44=await getBase44();
+      var result=await base44.entities.VIPWorkflowProgress.filter({customer_id:String(customerId)},'-updated_date',1,0);
+      var rows=Array.isArray(result)?result:(result&&result.items)||[];
+      var row=rows[0];
+      if(!row)return local;
+      cloudRows[String(customerId)]=row.id;
+      var cloud={
+        activeFlowId:row.active_flow_id||local.activeFlowId||'',
+        hideDone:row.hide_done===true,
+        flows:row.flows&&typeof row.flows==='object'?row.flows:(local.flows||{}),
+        updatedAt:Date.parse(row.updated_date||'')||Date.now()
+      };
+      try{localStorage.setItem(keyFor(customerId),JSON.stringify(cloud))}catch(_){}
+      return cloud;
+    }catch(e){
+      return local;
+    }
+  }
+
+  function queueCloudSave(customerId,data){
+    var key=String(customerId);
+    clearTimeout(cloudSaveTimers[key]);
+    cloudSaveTimers[key]=setTimeout(async function(){
+      try{
+        var base44=await getBase44();
+        var payload={
+          customer_id:key,
+          customer_name:currentCustomer&&String(currentCustomer.id)===key?currentCustomer.name:'',
+          active_flow_id:data.activeFlowId||'',
+          hide_done:data.hideDone===true,
+          flows:data.flows||{},
+          updated_by:(localStorage.getItem('mVIP_rep_username')||'admin')
+        };
+        var rowId=cloudRows[key];
+        if(!rowId){
+          var found=await base44.entities.VIPWorkflowProgress.filter({customer_id:key},'-updated_date',1,0);
+          var rows=Array.isArray(found)?found:(found&&found.items)||[];
+          if(rows[0]){rowId=rows[0].id;cloudRows[key]=rowId}
+        }
+        if(rowId)await base44.entities.VIPWorkflowProgress.update(rowId,payload);
+        else{
+          var created=await base44.entities.VIPWorkflowProgress.create(payload);
+          if(created&&created.id)cloudRows[key]=created.id;
+        }
+      }catch(e){}
+    },350);
+  }
+
   function saveProgress(customerId,data){
     data.updatedAt=Date.now();
     try{
@@ -109,6 +168,7 @@
     }catch(e){
       toast('本地保存空间不足');
     }
+    queueCloudSave(customerId,data);
   }
 
   function getCompletedSet(data,flowId){
@@ -377,7 +437,7 @@
     try{
       var bundle=await loadBundle();
       if(!document.body.contains(overlay))return;
-      var progress=loadProgress(customerId);
+      var progress=await loadCloudProgress(customerId);
       var activeId=chooseInitialFlow(bundle,progress);
       progress.activeFlowId=activeId;
       saveProgress(customerId,progress);
