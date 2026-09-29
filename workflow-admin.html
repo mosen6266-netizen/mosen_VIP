@@ -152,6 +152,25 @@ async function loadToolCatalog(){
       (data.tools||[]).forEach(t=>list.push({id:t.id||toolId(),title:t.title||t.name,path:t.path,category:t.category||'other'}));
     }
   }catch(_){}
+  try{
+    const res=await fetch('./toolbox/templates/index.json',{cache:'no-store'});
+    if(res.ok){
+      const data=await res.json();
+      (data.templates||[]).forEach(t=>{
+        const region=String(t.region||'').toLowerCase();
+        if(!['de','us'].includes(region))return;
+        const title=String(t.name||'模板').replace(/\.docx$/i,'');
+        const templatePath=String(t.path||'');
+        if(!templatePath)return;
+        list.push({
+          id:'template-'+region+'-'+title,
+          title,
+          path:'DOCX文件编辑器.html?template='+encodeURIComponent(templatePath),
+          category:region
+        });
+      });
+    }
+  }catch(_){}
   const seen=new Set();
   toolCatalog=list.filter(t=>{
     const k=String(t.path||''),cat=String(t.category||'').toLowerCase();
