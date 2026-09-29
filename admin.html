@@ -121,6 +121,7 @@
             <button id="refreshLogs" class="btn soft">刷新</button>
           </div>
           <div id="logList" style="margin-top:16px"></div>
+          <div id="logPager" class="customer-pager" style="margin-top:12px"></div>
         </div>
       </section>
 
@@ -209,13 +210,15 @@
 </div>
 
 <script type="module">
-import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, downloadCsv, uiAlert, uiConfirm, uiPrompt } from './base44.js?v=20260929-standalone-34';
+import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, downloadCsv, uiAlert, uiConfirm, uiPrompt, localDateKey, buildCustomerSearchText, readDashboardStat, adjustDashboardStat, createEntityBatch } from './base44.js';
 const ADMIN_HASH='78fd5f1e5a3f6eef05ab8d692942fd0ff4a8f4cc0e6087026626006a7fae452d';
 let reps=[],fields=[],customers=[],progressStages=[],editingCustomerId=null,draggedFieldId=null,dragSaving=false,draggedProgressId=null,progressDragSaving=false,editingFieldTypeId=null;
 let currentView='all',currentRepFilter='';
 const CUSTOMER_PAGE_SIZE=50;
 let customerPage=1,customerHasNext=false,totalCustomerCount=0,totalArchivedCount=0,customerCountByRep={},archivedCountByRep={},customerCountTimer=null,globalCustomerRows=null,searchTimer=null,adminEditorBaseline='',adminDraftTimer=null;
 let adminCustomerFormSaving=false;
+const LOG_PAGE_SIZE=100;
+let logPage=1,logHasNext=false;
 
 const loginView=document.getElementById('loginView'),appView=document.getElementById('appView'),loginNote=document.getElementById('loginNote');
 const customerModal=document.getElementById('customerModal'),customerEditForm=document.getElementById('customerEditForm'),customerEditNote=document.getElementById('customerEditNote');
@@ -270,12 +273,15 @@ async function enter(){
   await Promise.all([loadReps(),loadFields(),loadProgress(),loadLogs(),refreshCustomerCounts()]);
   showAdminView('all');
   try{
-    base44.entities.VIPSalesRep.subscribe(()=>loadReps());
-    base44.entities.VIPFormField.subscribe(()=>{if(!dragSaving){loadFields();loadCustomers()}});
-    base44.entities.VIPProgressStage.subscribe(()=>{if(!progressDragSaving){loadProgress();loadCustomers()}});
-    base44.entities.VIPCustomer.subscribe(()=>{loadCustomers();scheduleCustomerCountRefresh()});
-    base44.entities.VIPActivityLog.subscribe(()=>loadLogs());
+    let repTimer=0,fieldTimer=0,progressTimer=0,customerTimer=0,logTimer=0,statTimer=0;
+    base44.entities.VIPSalesRep.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(repTimer);repTimer=setTimeout(()=>loadReps(),450)});
+    base44.entities.VIPFormField.subscribe(()=>{if(window.MVIP_MAINTENANCE||dragSaving)return;clearTimeout(fieldTimer);fieldTimer=setTimeout(()=>{loadFields();loadCustomers()},500)});
+    base44.entities.VIPProgressStage.subscribe(()=>{if(window.MVIP_MAINTENANCE||progressDragSaving)return;clearTimeout(progressTimer);progressTimer=setTimeout(()=>{loadProgress();loadCustomers()},500)});
+    base44.entities.VIPCustomer.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(customerTimer);customerTimer=setTimeout(()=>loadCustomers(),500)});
+    base44.entities.VIPDashboardStats.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(statTimer);statTimer=setTimeout(()=>refreshCustomerCounts(),450)});
+    base44.entities.VIPActivityLog.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(logTimer);logTimer=setTimeout(()=>loadLogs(),650)});
   }catch(_){}
+  ensureAdminSearchIndex().catch(()=>{});
 }
 document.getElementById('adminLogin').onclick=async()=>{
   const p=document.getElementById('adminPassword').value;
@@ -555,7 +561,14 @@ function attachAdminPreviewEditor(portal,row){
     const rep_username=portal.querySelector('[data-preview-rep]')?.value||'';
     showMessage(note,'正在保存…');
     try{
-      await base44.entities.VIPCustomer.update(row.id,{rep_username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
+      await base44.entities.VIPCustomer.update(row.id,{rep_username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length,search_text:buildCustomerSearchText(rep_username,data)});
+      if(String(rep_username)!==String(row.rep_username||'')){
+        const active=row.archived!==true?1:0,archived=row.archived===true?1:0,today=(active&&localDateKey(row.created_date)===localDateKey())?1:0;
+        await Promise.all([
+          adjustDashboardStat('rep:'+String(row.rep_username||''),{active_customers:-active,archived_customers:-archived,today_active_customers:-today},{scope:'rep',rep_username:String(row.rep_username||'')}),
+          adjustDashboardStat('rep:'+rep_username,{active_customers:active,archived_customers:archived,today_active_customers:today},{scope:'rep',rep_username})
+        ]);
+      }
       row.rep_username=rep_username;row.data=data;row.completed_progress_ids=completed_progress_ids;
       showMessage(note,'已保存并同步。','ok');
       await loadCustomers();
@@ -611,17 +624,34 @@ function localLogTime(value){
   return d.toLocaleString('zh-CN',{hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
 }
 let activityLogs=[];
-async function loadLogs(){
+function renderLogPager(){
+  const box=document.getElementById('logPager');if(!box)return;
+  box.innerHTML='<div class="customer-pager-info">第 <b>'+logPage+'</b> 页 · 每页 '+LOG_PAGE_SIZE+' 条</div><div class="customer-pager-actions"><button id="logPrevPage" class="btn soft" '+(logPage<=1?'disabled':'')+'>上一页</button><button id="logNextPage" class="btn soft" '+(!logHasNext?'disabled':'')+'>下一页</button></div>';
+  document.getElementById('logPrevPage')?.addEventListener('click',()=>{if(logPage>1){logPage--;loadLogs()}});
+  document.getElementById('logNextPage')?.addEventListener('click',()=>{if(logHasNext){logPage++;loadLogs()}});
+}
+function logServerQuery(){
+  const date=document.getElementById('logDate')?.value||localDateKey();
+  const q=(document.getElementById('logSearch')?.value||'').trim();
+  const query={event_day:date};
+  if(q){
+    const rx={$regex:adminRegexEscape(q),$options:'i'};
+    query.$or=[{actor_display_name:rx},{actor_username:rx},{customer_name:rx},{message:rx},{target_label:rx}];
+  }
+  return query;
+}
+async function loadLogs(reset=false){
   const box=document.getElementById('logList');if(!box)return;
+  if(reset)logPage=1;
   try{
-    activityLogs=unwrap(await base44.entities.VIPActivityLog.list({sort:'-created_date',limit:1000}));
-    const date=document.getElementById('logDate')?.value||new Date().toISOString().slice(0,10);
-    const q=(document.getElementById('logSearch')?.value||'').trim().toLowerCase();
-    const todayRows=activityLogs.filter(x=>localLogDate(x.event_time||x.created_date)===date);
-    document.getElementById('sidebarLogCount').textContent=todayRows.length;
-    const rows=todayRows.filter(x=>(String(x.actor_display_name||'')+' '+String(x.actor_username||'')+' '+String(x.customer_name||'')+' '+String(x.message||'')).toLowerCase().includes(q));
-    if(!rows.length){box.innerHTML='<div class="empty">这一天暂无匹配日志</div>';return}
-    box.innerHTML='<div class="activity-list">'+rows.map(x=>'<div class="activity-item"><div class="activity-time">'+esc(localLogTime(x.event_time||x.created_date))+'</div><div class="activity-body"><div class="activity-title">'+esc(x.message||'')+'</div><div class="activity-meta">'+esc(x.actor_display_name||x.actor_username||'未知业务员')+(x.customer_name?' · '+esc(x.customer_name):'')+(x.target_label?' · '+esc(x.target_label):'')+'</div></div></div>').join('')+'</div>';
+    const skip=(logPage-1)*LOG_PAGE_SIZE;
+    let rows=unwrap(await base44.entities.VIPActivityLog.filter(logServerQuery(),'-event_time',LOG_PAGE_SIZE+1,skip));
+    logHasNext=rows.length>LOG_PAGE_SIZE;
+    activityLogs=rows.slice(0,LOG_PAGE_SIZE);
+    document.getElementById('sidebarLogCount').textContent=logHasNext?(LOG_PAGE_SIZE+'+'):String(activityLogs.length);
+    if(!activityLogs.length){box.innerHTML='<div class="empty">这一天暂无匹配日志</div>';renderLogPager();return}
+    box.innerHTML='<div class="activity-list">'+activityLogs.map(x=>'<div class="activity-item"><div class="activity-time">'+esc(localLogTime(x.event_time||x.created_date))+'</div><div class="activity-body"><div class="activity-title">'+esc(x.message||'')+'</div><div class="activity-meta">'+esc(x.actor_display_name||x.actor_username||'未知业务员')+(x.customer_name?' · '+esc(x.customer_name):'')+(x.target_label?' · '+esc(x.target_label):'')+'</div></div></div>').join('')+'</div>';
+    renderLogPager();
   }catch(err){box.innerHTML='<div class="notice err">读取日志失败：'+esc(err?.message||String(err))+'</div>'}
 }
 const FULL_BACKUP_FORMAT='MOSEN_VIP_FULL_BACKUP';
@@ -1036,6 +1066,37 @@ async function importFullBackup(file){
   }
 }
 
+async function ensureAdminSearchIndex(){
+  const all=[];let skip=0;
+  while(true){
+    const batch=unwrap(await base44.entities.VIPCustomer.list('-created_date',200,skip));
+    all.push(...batch);if(batch.length<200)break;skip+=200;if(skip>10000)break;
+  }
+  const missing=all.filter(r=>String(r.search_text||'')!==buildCustomerSearchText(r.rep_username,r.data||{}));
+  let p=0;
+  async function worker(){
+    while(true){
+      const i=p++;if(i>=missing.length)return;
+      const r=missing[i];
+      try{await base44.entities.VIPCustomer.update(r.id,{search_text:buildCustomerSearchText(r.rep_username,r.data||{})})}catch(_){}
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(5,missing.length)},()=>worker()));
+}
+function adminRegexEscape(v){return String(v||'').replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
+function adminServerQuery(){
+  const q=adminBaseQuery();
+  const search=(document.getElementById('customerSearch')?.value||'').trim().toLowerCase();
+  const star=document.getElementById('adminStarFilter')?.value||'';
+  const progress=document.getElementById('adminProgressFilter')?.value||'';
+  const country=(document.getElementById('adminCountryFilter')?.value||'').trim().toLowerCase();
+  if(star==='1')q.starred=true;
+  if(star==='0')q.starred=false;
+  if(progress)q.completed_progress_ids={$in:[progress]};
+  const terms=[search,country].filter(Boolean).map(v=>({search_text:{$regex:adminRegexEscape(v),$options:'i'}}));
+  if(terms.length)q.$and=terms;
+  return q;
+}
 async function fetchAllAdminCustomers(query){
   const all=[];let skip=0;
   while(true){const batch=unwrap(await base44.entities.VIPCustomer.filter(query,'-admin_sort_score',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500;if(skip>10000)break}
@@ -1066,9 +1127,15 @@ function matchesAdminFilters(r){
 }
 async function fetchCustomerPage(){
   if(adminFilterActive()){
-    globalCustomerRows=(await fetchAllAdminCustomers(adminBaseQuery())).filter(matchesAdminFilters);
-    const start=(customerPage-1)*CUSTOMER_PAGE_SIZE;
-    customers=globalCustomerRows.slice(start,start+CUSTOMER_PAGE_SIZE);customerHasNext=start+CUSTOMER_PAGE_SIZE<globalCustomerRows.length;
+    globalCustomerRows=null;const skip=(customerPage-1)*CUSTOMER_PAGE_SIZE;
+    try{
+      const rows=unwrap(await base44.entities.VIPCustomer.filter(adminServerQuery(),'-admin_sort_score',CUSTOMER_PAGE_SIZE+1,skip));
+      customerHasNext=rows.length>CUSTOMER_PAGE_SIZE;customers=rows.slice(0,CUSTOMER_PAGE_SIZE);
+    }catch(_){
+      globalCustomerRows=(await fetchAllAdminCustomers(adminBaseQuery())).filter(matchesAdminFilters);
+      const start=(customerPage-1)*CUSTOMER_PAGE_SIZE;
+      customers=globalCustomerRows.slice(start,start+CUSTOMER_PAGE_SIZE);customerHasNext=start+CUSTOMER_PAGE_SIZE<globalCustomerRows.length;
+    }
   }else{
     globalCustomerRows=null;const skip=(customerPage-1)*CUSTOMER_PAGE_SIZE;
     const rows=unwrap(await base44.entities.VIPCustomer.filter(adminBaseQuery(),'-admin_sort_score',CUSTOMER_PAGE_SIZE+1,skip));
@@ -1077,13 +1144,25 @@ async function fetchCustomerPage(){
   if(!customers.length&&customerPage>1){customerPage--;return fetchCustomerPage()}
 }
 async function refreshCustomerCounts(){
-  const all=[];let skip=0;
-  while(true){const batch=unwrap(await base44.entities.VIPCustomer.list('-created_date',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500}
-  let active=0,archived=0,counts={},archiveCounts={};
-  for(const row of all){const key=String(row.rep_username||'');if(row.archived===true){archived++;archiveCounts[key]=(archiveCounts[key]||0)+1}else{active++;counts[key]=(counts[key]||0)+1}}
-  totalCustomerCount=active;totalArchivedCount=archived;customerCountByRep=counts;archivedCountByRep=archiveCounts;
-  document.getElementById('totalCustomers').textContent=active;document.getElementById('allCustomerCount').textContent=active;
-  document.getElementById('archivedCustomerCount').textContent=archived;document.getElementById('archivedCustomersStat').textContent=archived;
+  const rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'key',limit:500}));
+  const global=rows.find(x=>x.key==='global');
+  if(global){
+    totalCustomerCount=Number(global.active_customers||0);
+    totalArchivedCount=Number(global.archived_customers||0);
+    customerCountByRep={};archivedCountByRep={};
+    rows.filter(x=>x.scope==='rep').forEach(x=>{
+      customerCountByRep[String(x.rep_username||'')]=Number(x.active_customers||0);
+      archivedCountByRep[String(x.rep_username||'')]=Number(x.archived_customers||0);
+    });
+  }else{
+    const all=[];let skip=0;
+    while(true){const batch=unwrap(await base44.entities.VIPCustomer.list('-created_date',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500}
+    let active=0,archived=0,counts={},archiveCounts={};
+    for(const row of all){const key=String(row.rep_username||'');if(row.archived===true){archived++;archiveCounts[key]=(archiveCounts[key]||0)+1}else{active++;counts[key]=(counts[key]||0)+1}}
+    totalCustomerCount=active;totalArchivedCount=archived;customerCountByRep=counts;archivedCountByRep=archiveCounts;
+  }
+  document.getElementById('totalCustomers').textContent=totalCustomerCount;document.getElementById('allCustomerCount').textContent=totalCustomerCount;
+  document.getElementById('archivedCustomerCount').textContent=totalArchivedCount;document.getElementById('archivedCustomersStat').textContent=totalArchivedCount;
   renderSidebar();renderReps();
 }
 function scheduleCustomerCountRefresh(){clearTimeout(customerCountTimer);customerCountTimer=setTimeout(()=>refreshCustomerCounts().catch(()=>{}),1000)}
@@ -1112,7 +1191,7 @@ function repDisplayName(username){
   return rep?.display_name||rep?.username||username||'未指定业务员';
 }
 async function writeAdminLog(payload){
-  try{await base44.entities.VIPActivityLog.create({actor_username:'admin',actor_display_name:'管理员',actor_type:'admin',action_type:payload.action_type||'update',customer_id:payload.customer_id||'',customer_name:payload.customer_name||'',target_key:payload.target_key||'',target_label:payload.target_label||'',old_value:payload.old_value==null?'':String(payload.old_value),new_value:payload.new_value==null?'':String(payload.new_value),message:payload.message||'',event_time:new Date().toISOString(),metadata:payload.metadata||{}})}catch(_){}
+  try{await base44.entities.VIPActivityLog.create({actor_username:'admin',actor_display_name:'管理员',actor_type:'admin',action_type:payload.action_type||'update',customer_id:payload.customer_id||'',customer_name:payload.customer_name||'',target_key:payload.target_key||'',target_label:payload.target_label||'',old_value:payload.old_value==null?'':String(payload.old_value),new_value:payload.new_value==null?'':String(payload.new_value),message:payload.message||'',event_time:new Date().toISOString(),event_day:localDateKey(),metadata:payload.metadata||{}})}catch(_){}
 }
 function adminCustomerCopyText(row){
   const lines=['客户姓名：'+(fixedCustomerValue(row,'f_customer_name')||''),'业务员：'+repDisplayName(row.rep_username)];
@@ -1125,11 +1204,21 @@ async function archiveAdminCustomer(row){
   const reason=await uiPrompt('可填写归档原因，例如：已完成 / 客户失联 / 暂停跟进 / 重复客户 / 其他。',{title:'归档客户',placeholder:'归档原因（可选）',confirmText:'下一步'});if(reason===null)return;
   const name=fixedCustomerValue(row,'f_customer_name')||'未命名客户';if(!await uiConfirm('确定将「'+name+'」移入归档吗？\n客户资料不会删除，可以随时恢复。',{title:'确认归档',confirmText:'确认归档'}))return;
   await base44.entities.VIPCustomer.update(row.id,{archived:true,archived_at:new Date().toISOString(),archived_by_username:'admin',archived_by_display_name:'管理员',archived_by_type:'admin',archive_reason:reason});
+  const todayDelta=localDateKey(row.created_date)===localDateKey()?-1:0;
+  await Promise.all([
+    adjustDashboardStat('global',{active_customers:-1,archived_customers:1,today_active_customers:todayDelta},{scope:'global'}),
+    adjustDashboardStat('rep:'+String(row.rep_username||''),{active_customers:-1,archived_customers:1,today_active_customers:todayDelta},{scope:'rep',rep_username:String(row.rep_username||'')})
+  ]);
   await writeAdminLog({action_type:'customer_archive',customer_id:row.id,customer_name:name,message:'管理员将客户「'+name+'」归档'+(reason?'，原因：'+reason:'')});await loadCustomers({refreshCounts:true});
 }
 async function restoreAdminCustomer(row){
   const name=fixedCustomerValue(row,'f_customer_name')||'未命名客户';if(!await uiConfirm('将「'+name+'」恢复到正常客户列表吗？',{title:'恢复客户',confirmText:'确认恢复'}))return;
   await base44.entities.VIPCustomer.update(row.id,{archived:false,archived_at:'',archived_by_username:'',archived_by_display_name:'',archived_by_type:'',archive_reason:''});
+  const todayDelta=localDateKey(row.created_date)===localDateKey()?1:0;
+  await Promise.all([
+    adjustDashboardStat('global',{active_customers:1,archived_customers:-1,today_active_customers:todayDelta},{scope:'global'}),
+    adjustDashboardStat('rep:'+String(row.rep_username||''),{active_customers:1,archived_customers:-1,today_active_customers:todayDelta},{scope:'rep',rep_username:String(row.rep_username||'')})
+  ]);
   await writeAdminLog({action_type:'customer_restore',customer_id:row.id,customer_name:name,message:'管理员将客户「'+name+'」从归档恢复'});await loadCustomers({refreshCounts:true});
 }
 function renderCustomers(){
@@ -1145,7 +1234,7 @@ function renderCustomers(){
   box.querySelectorAll('.archivecustomer').forEach(b=>b.onclick=()=>archiveAdminCustomer(customers.find(x=>x.id===b.dataset.id)));
   box.querySelectorAll('.restorecustomer').forEach(b=>b.onclick=()=>restoreAdminCustomer(customers.find(x=>x.id===b.dataset.id)));
   box.querySelectorAll('.star-btn').forEach(b=>b.onclick=()=>{const row=customers.find(x=>x.id===b.dataset.id);if(row)setAdminStar(row,!row.starred)});
-  box.querySelectorAll('.delcustomer').forEach(b=>b.onclick=async()=>{const row=customers.find(x=>x.id===b.dataset.id);if(!row||!await uiConfirm('永久删除后无法恢复，请确认是否继续。',{title:'永久删除客户',confirmText:'永久删除',danger:true}))return;await writeAdminLog({action_type:'customer_delete',customer_id:row.id,customer_name:fixedCustomerValue(row,'f_customer_name')||'未命名客户',message:'管理员永久删除了归档客户「'+(fixedCustomerValue(row,'f_customer_name')||'未命名客户')+'」'});await base44.entities.VIPCustomer.delete(row.id);await loadCustomers({refreshCounts:true})})
+  box.querySelectorAll('.delcustomer').forEach(b=>b.onclick=async()=>{const row=customers.find(x=>x.id===b.dataset.id);if(!row||!await uiConfirm('永久删除后无法恢复，请确认是否继续。',{title:'永久删除客户',confirmText:'永久删除',danger:true}))return;await writeAdminLog({action_type:'customer_delete',customer_id:row.id,customer_name:fixedCustomerValue(row,'f_customer_name')||'未命名客户',message:'管理员永久删除了归档客户「'+(fixedCustomerValue(row,'f_customer_name')||'未命名客户')+'」'});await base44.entities.VIPCustomer.delete(row.id);await Promise.all([adjustDashboardStat('global',{archived_customers:-1},{scope:'global'}),adjustDashboardStat('rep:'+String(row.rep_username||''),{archived_customers:-1},{scope:'rep',rep_username:String(row.rep_username||'')})]);await loadCustomers({refreshCounts:true})})
 }
 function adminCurrentEditorState(){
   const data={};customerEditForm.querySelectorAll('[data-key]').forEach(el=>data[el.dataset.key]=el.value);
@@ -1180,7 +1269,16 @@ customerEditForm.onsubmit=async e=>{
   const data={...(row.data||{})};customerEditForm.querySelectorAll('[data-key]').forEach(el=>data[el.dataset.key]=el.value);
   try{
     const completed_progress_ids=[...document.querySelectorAll('#adminProgressChecklist input[type="checkbox"]:checked')].map(x=>x.dataset.progressId);
-    await base44.entities.VIPCustomer.update(row.id,{rep_username:document.getElementById('editRep').value,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
+    const newRep=document.getElementById('editRep').value;
+    await base44.entities.VIPCustomer.update(row.id,{rep_username:newRep,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length,search_text:buildCustomerSearchText(newRep,data)});
+    if(String(newRep)!==String(row.rep_username||'')){
+      const active=row.archived!==true?1:0,archived=row.archived===true?1:0,today=(active&&localDateKey(row.created_date)===localDateKey())?1:0;
+      await Promise.all([
+        adjustDashboardStat('rep:'+String(row.rep_username||''),{active_customers:-active,archived_customers:-archived,today_active_customers:-today},{scope:'rep',rep_username:String(row.rep_username||'')}),
+        adjustDashboardStat('rep:'+newRep,{active_customers:active,archived_customers:archived,today_active_customers:today},{scope:'rep',rep_username:newRep})
+      ]);
+      row.rep_username=newRep;
+    }
     clearAdminDraft();adminEditorBaseline=adminCurrentEditorState();showMessage(customerEditNote,'客户资料已更新。','ok');await loadCustomers();
     setTimeout(()=>{customerModal.hidden=true;adminCustomerFormSaving=false;if(submitBtn){submitBtn.disabled=false;submitBtn.textContent=oldText;submitBtn.removeAttribute('aria-busy')}},350);
   }catch(err){
@@ -1205,9 +1303,9 @@ document.getElementById('adminCountryFilter').addEventListener('input',()=>{clea
 document.getElementById('refreshCustomers').onclick=async()=>{await loadCustomers();await refreshCustomerCounts()};
 document.getElementById('refreshReps').onclick=loadReps;
 document.getElementById('closeCustomerModal').onclick=requestCloseAdminEditor;document.getElementById('cancelCustomerEdit').onclick=requestCloseAdminEditor;
-document.getElementById('logDate').onchange=loadLogs;
-document.getElementById('logSearch').oninput=loadLogs;
-document.getElementById('refreshLogs').onclick=loadLogs;
+document.getElementById('logDate').onchange=()=>loadLogs(true);
+document.getElementById('logSearch').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadLogs(true),350)};
+document.getElementById('refreshLogs').onclick=()=>loadLogs(true);
 document.getElementById('exportBackup').onclick=exportFullBackup;
 document.getElementById('importBackup').onclick=()=>document.getElementById('backupFile').click();
 document.getElementById('backupFile').onchange=async e=>{const file=e.target.files?.[0];if(file)await importFullBackup(file);e.target.value=''};
