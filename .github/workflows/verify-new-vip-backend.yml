@@ -1,0 +1,30 @@
+name: Verify New VIP Backend
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/verify-new-vip-backend.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Verify anonymous SDK access
+        run: |
+          mkdir /tmp/vip-verify
+          cd /tmp/vip-verify
+          npm init -y >/dev/null 2>&1
+          npm install @base44/sdk >/dev/null 2>&1
+          cat > test.mjs <<'EOF'
+          import { createClient } from '@base44/sdk';
+          const base44=createClient({appId:'6abb8b9e7bc76cdfe0aeb883'});
+          const reps=await base44.entities.VIPSalesRep.list('-created_date',100);
+          const customers=await base44.entities.VIPCustomer.list('-created_date',100);
+          console.log('REPS_OK', Array.isArray(reps)?reps.length:'not-array');
+          console.log('CUSTOMERS_OK', Array.isArray(customers)?customers.length:'not-array');
+          EOF
+          node test.mjs
