@@ -1,0 +1,42 @@
+name: Sync unified tool catalog
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "toolbox/index.html"
+      - "toolbox/tools/index.json"
+      - "toolbox/global-order.json"
+      - "toolbox/templates/index.json"
+      - "scripts/sync-tool-catalog.mjs"
+      - ".github/workflows/sync-tool-catalog.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-tool-catalog
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Rebuild catalog
+        run: node scripts/sync-tool-catalog.mjs
+      - name: Commit catalog if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add toolbox/tool-catalog.json
+          if git diff --cached --quiet; then
+            echo "Catalog already current"
+          else
+            git commit -m "Sync unified tool catalog"
+            git push
+          fi
