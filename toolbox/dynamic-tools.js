@@ -2,7 +2,7 @@
   'use strict';
 
   const OWNER = 'mosen6266-netizen';
-  const REPO = 'mosen6266';
+  const REPO = 'mosen_VIP';
   const BRANCH = 'main';
   const INDEX_URL = './tools/index.json';
   const GLOBAL_ORDER_URL = './global-order.json';
