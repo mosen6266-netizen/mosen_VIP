@@ -583,3 +583,9 @@ body.ui-dialog-open{overflow:hidden}
   }
   #progressList .progress-sort-row>.row .btn{flex:1;min-width:108px}
 }
+
+/* preview eye pinned to far right */
+.fixed-customer-table td[data-label="操作"] .preview-wrap{
+  margin-left:auto;
+  flex:0 0 auto;
+}
