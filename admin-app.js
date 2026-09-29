@@ -1194,6 +1194,73 @@ function validateBusinessBackup(raw){
   return e;
 }
 
+async function getLatestBusinessSafetySnapshot(){
+  let best=null,bestTime=0;
+  try{
+    const cached=localStorage.getItem('mvip_business_backup_cache_v1');
+    if(cached){
+      const parsed=JSON.parse(cached);
+      if(parsed?.format===BUSINESS_BACKUP_FORMAT&&parsed?.entities){
+        best=parsed;
+        bestTime=Date.parse(parsed.snapshot_updated_at||parsed.exported_at||0)||0;
+      }
+    }
+  }catch(_){}
+  try{
+    const r=await fetch('./business-backup-snapshot.json?v='+Date.now(),{cache:'no-store'});
+    if(r.ok){
+      const parsed=await r.json();
+      if(parsed?.format===BUSINESS_BACKUP_FORMAT&&parsed?.entities){
+        const t=Date.parse(parsed.snapshot_updated_at||parsed.exported_at||0)||0;
+        if(!best||t>bestTime){best=parsed;bestTime=t}
+      }
+    }
+  }catch(_){}
+  if(!best)throw new Error('没有可用的恢复前业务数据安全快照，请先成功导出一次业务数据备份');
+  const copy=deepCloneValue(best);
+  copy.exported_at=new Date().toISOString();
+  copy.counts=businessBackupCounts(copy.entities);
+  copy.checksum_sha256=await sha256(JSON.stringify(copy.entities));
+  return copy;
+}
+function assertSafetySnapshotMatchesLoadedSystem(safety){
+  const n=businessBackupCounts(safety.entities||{});
+  const loadedCustomerTotal=Number(totalCustomerCount||0)+Number(totalArchivedCount||0);
+  const problems=[];
+  if(reps.length&&Number(n.sales_reps)!==Number(reps.length))problems.push('业务员：当前 '+reps.length+'，安全快照 '+n.sales_reps);
+  if(fields.length&&Number(n.form_fields)!==Number(fields.length))problems.push('登记字段：当前 '+fields.length+'，安全快照 '+n.form_fields);
+  if(progressStages.length&&Number(n.progress_stages)!==Number(progressStages.length))problems.push('客户进度：当前 '+progressStages.length+'，安全快照 '+n.progress_stages);
+  if(loadedCustomerTotal>0&&Number(n.customers)!==loadedCustomerTotal)problems.push('客户：当前 '+loadedCustomerTotal+'，安全快照 '+n.customers);
+  if(problems.length)throw new Error('为避免资料丢失，恢复已停止：当前系统与最近安全快照数量不一致。'+problems.join('；')+'。请先重新导出一次业务数据备份，再进行导入恢复。');
+}
+async function deleteBusinessRowsFromSnapshot(entityName,rows){
+  const handler=base44.entities[entityName];
+  if(!handler)return;
+  const ids=[...new Set((rows||[]).map(x=>String(x?.__old_id||'')).filter(Boolean))];
+  for(const id of ids){
+    try{await handler.delete(id)}catch(err){
+      const msg=String(err?.message||err||'').toLowerCase();
+      if(msg.includes('not found')||msg.includes('404'))continue;
+      throw err;
+    }
+  }
+}
+async function clearBusinessDataFromSafetySnapshot(safety){
+  const e=safety.entities||{};
+  const order=[
+    ['VIPActivityLogArchive',e.VIPActivityLogArchive],
+    ['VIPActivityLog',e.VIPActivityLog],
+    ['VIPWorkflowFlowProgress',e.VIPWorkflowFlowProgress],
+    ['VIPWorkflowProgress',e.VIPWorkflowProgress],
+    ['VIPWorkflowDefinition',e.VIPWorkflowDefinition],
+    ['VIPCustomer',e.VIPCustomer],
+    ['VIPProgressStage',e.VIPProgressStage],
+    ['VIPFormField',e.VIPFormField],
+    ['VIPSalesRep',e.VIPSalesRep]
+  ];
+  for(const [name,rows] of order)await deleteBusinessRowsFromSnapshot(name,rows||[]);
+}
+
 async function importBusinessBackup(file){
   const note=document.getElementById('backupNote');
   window.MVIP_MAINTENANCE=true;
@@ -1221,29 +1288,16 @@ async function importBusinessBackup(file){
     );
     if(!ok)return;
 
-    showMessage(note,'正在生成恢复前业务数据安全备份…','warn');
-    const safety=await makeBusinessBackup(null);
+    showMessage(note,'正在准备恢复前业务数据安全快照…','warn');
+    const safety=await getLatestBusinessSafetySnapshot();
+    assertSafetySnapshotMatchesLoadedSystem(safety);
     downloadBackupObject(
       safety,
       'mosen_VIP-恢复前业务数据备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json'
     );
 
-    showMessage(note,'正在恢复业务数据，请不要关闭页面…','warn');
-    for(const name of [
-      'VIPActivityLogArchive',
-      'VIPActivityLog',
-      'VIPWorkflowFlowProgress',
-      'VIPWorkflowProgress',
-      'VIPWorkflowDefinition',
-      'VIPCustomer',
-      'VIPProgressStage',
-      'VIPFormField',
-      'VIPSalesRep',
-      'VIPDashboardStats',
-      'VIPSystemStats'
-    ]){
-      try{await wipeEntity(name)}catch(_){}
-    }
+    showMessage(note,'正在按安全快照清理并恢复业务数据，请不要关闭页面…','warn');
+    await clearBusinessDataFromSafetySnapshot(safety);
 
     await restoreEntities(entities);
     try{await reconcileDashboardStats(base44)}catch(_){}
