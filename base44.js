@@ -33,30 +33,50 @@ export async function readDashboardStat(key){
   return Array.isArray(rows)?rows[0]:(rows?.items||[])[0]||null;
 }
 
+function newStatOpId(){
+  if(globalThis.crypto?.randomUUID)return crypto.randomUUID();
+  return 'stat-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+}
 export function adjustDashboardStat(key,deltas={},meta={}){
-  const k=String(key);
+  const k=String(key),opId=newStatOpId();
   const prev=statQueues.get(k)||Promise.resolve();
   const next=prev.catch(()=>{}).then(async()=>{
-    let row=await readDashboardStat(k);
-    const base=row||{
-      key:k,
-      scope:meta.scope|| (k==='global'?'global':'rep'),
-      rep_username:meta.rep_username|| (k.startsWith('rep:')?k.slice(4):''),
-      active_customers:0,archived_customers:0,today_active_customers:0,version:0
-    };
-    const payload={
-      key:k,
-      scope:base.scope||meta.scope||'rep',
-      rep_username:base.rep_username||meta.rep_username||'',
-      active_customers:Math.max(0,Number(base.active_customers||0)+Number(deltas.active_customers||0)),
-      archived_customers:Math.max(0,Number(base.archived_customers||0)+Number(deltas.archived_customers||0)),
-      today_active_customers:Math.max(0,Number(base.today_active_customers||0)+Number(deltas.today_active_customers||0)),
-      updated_at:new Date().toISOString(),
-      version:Number(base.version||0)+1
-    };
-    if(row)await base44.entities.VIPDashboardStats.update(row.id,payload);
-    else row=await base44.entities.VIPDashboardStats.create(payload);
-    return {...base,...payload,id:row?.id||base.id};
+    let lastErr=null;
+    for(let attempt=0;attempt<6;attempt++){
+      try{
+        let row=await readDashboardStat(k);
+        const base=row||{
+          key:k,
+          scope:meta.scope|| (k==='global'?'global':'rep'),
+          rep_username:meta.rep_username|| (k.startsWith('rep:')?k.slice(4):''),
+          active_customers:0,archived_customers:0,today_active_customers:0,version:0,recent_op_ids:[]
+        };
+        const recent=Array.isArray(base.recent_op_ids)?base.recent_op_ids.map(String):[];
+        if(recent.includes(opId))return base;
+        const payload={
+          key:k,
+          scope:base.scope||meta.scope||'rep',
+          rep_username:base.rep_username||meta.rep_username||'',
+          active_customers:Math.max(0,Number(base.active_customers||0)+Number(deltas.active_customers||0)),
+          archived_customers:Math.max(0,Number(base.archived_customers||0)+Number(deltas.archived_customers||0)),
+          today_active_customers:Math.max(0,Number(base.today_active_customers||0)+Number(deltas.today_active_customers||0)),
+          updated_at:new Date().toISOString(),
+          version:Number(base.version||0)+1,
+          last_op_id:opId,
+          recent_op_ids:[...recent.slice(-23),opId]
+        };
+        if(row)await base44.entities.VIPDashboardStats.update(row.id,payload);
+        else row=await base44.entities.VIPDashboardStats.create(payload);
+        const verify=await readDashboardStat(k);
+        if(Array.isArray(verify?.recent_op_ids)&&verify.recent_op_ids.map(String).includes(opId))return verify;
+        lastErr=new Error('统计缓存发生并发更新，正在自动重试');
+        await new Promise(r=>setTimeout(r,30+attempt*40));
+      }catch(err){
+        lastErr=err;
+        await new Promise(r=>setTimeout(r,60+attempt*60));
+      }
+    }
+    throw lastErr||new Error('统计缓存更新失败');
   }).finally(()=>{if(statQueues.get(k)===next)statQueues.delete(k)});
   statQueues.set(k,next);
   return next;
