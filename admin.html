@@ -127,14 +127,14 @@
 
       <section id="view-backup" class="admin-view" hidden>
         <div class="card">
-          <div class="section-title"><div class="dot"></div><h2>系统完整备份 / 恢复</h2><div class="spacer"></div><span class="pill">一键迁移全部数据和设置</span></div>
-          <div class="backup-intro">V5 完整灾难备份为 ZIP：包含整个 mosen_VIP GitHub 仓库、全部客户与业务员数据、登记字段、客户进度、操作日志、全部话术与分类、每个客户独立话术进度、实时工具目录、统计缓存、工具/模板/排序/访问配置，以及 Base44 schema 蓝图。恢复前会自动再生成一份当前系统 V5 安全备份。</div>
+          <div class="section-title"><div class="dot"></div><h2>业务数据备份 / 恢复</h2><div class="spacer"></div><span class="pill">只备份客户与业务数据</span></div>
+          <div class="backup-intro">业务数据备份只包含：全部业务员、登记字段设置、客户进度设置、全部客户资料、业务员归属、客户已完成进度、归档/星标状态、操作日志、话术管理中的全部话术，以及每个客户的话术进度。不备份 GitHub 仓库、网页代码、工具、模板或系统功能。恢复前会自动导出一份当前业务数据安全备份。</div>
           <div class="backup-actions">
-            <button id="exportBackup" class="btn primary">导出 V5 完整灾难备份</button>
-            <button id="importBackup" class="btn soft">导入 V5 / V4 备份并恢复</button>
-            <input id="backupFile" type="file" accept=".zip,.json,application/zip,application/json" hidden>
+            <button id="exportBackup" class="btn primary">导出业务数据备份</button>
+            <button id="importBackup" class="btn soft">导入业务数据备份并恢复</button>
+            <input id="backupFile" type="file" accept=".json,application/json" hidden>
           </div>
-          <div class="notice warn" style="margin-top:16px">V5 恢复会重建当前云端数据并恢复整个 GitHub 仓库；V4 JSON 仍可兼容导入。恢复期间系统会进入维护状态，暂停实时刷新，结束后一次性重新载入。</div>
+          <div class="notice warn" style="margin-top:16px">恢复只会替换客户与业务相关数据，不会修改 GitHub 仓库、页面代码、工具或模板。恢复期间系统会暂停实时刷新，完成后自动重新载入客户、业务员、进度、日志和话术数据。</div>
           <div id="backupNote" class="notice" hidden></div>
         </div>
       </section>
@@ -209,4 +209,4 @@
   </div>
 </div>
 
-<script type="module" src="./admin-app.js?v=20260929-backupfix1"></script><script src="./vip-tool-catalog.js?v=20260929-catalog-2"></script><script src="./vip-workflow.js?v=20260929-standalone-sync-6"></script></body></html>
+<script type="module" src="./admin-app.js?v=20260929-businessbackup1"></script><script src="./vip-tool-catalog.js?v=20260929-catalog-2"></script><script src="./vip-workflow.js?v=20260929-standalone-sync-6"></script></body></html>
