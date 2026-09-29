@@ -1,11 +1,15 @@
 import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, downloadCsv, uiAlert, uiConfirm, uiPrompt, localDateKey, buildCustomerSearchText, readDashboardStat, adjustDashboardStat, createEntityBatch } from './base44.js';
-import { customerSearchFields, ensureCustomerIndex, initGlobalSearch, runDailyMaintenance, smartCustomerSubscription, reconcileDashboardStats } from './vip-optimizations.js?v=20260929-countfix3';
+import { customerSearchFields, initGlobalSearch, reconcileDashboardStats } from './vip-optimizations.js?v=20260929-stable-load1';
+import { createCustomerStore, customerPage as selectCustomerPage, customerNotice, subscribeCustomerRefresh, retryRead, recordRows } from './customer-loader.js?v=20260929-stable-load1';
 const ADMIN_HASH='78fd5f1e5a3f6eef05ab8d692942fd0ff4a8f4cc0e6087026626006a7fae452d';
 let reps=[],fields=[],customers=[],progressStages=[],editingCustomerId=null,draggedFieldId=null,dragSaving=false,draggedProgressId=null,progressDragSaving=false,editingFieldTypeId=null;
 let currentView='all',currentRepFilter='';
 const CUSTOMER_PAGE_SIZE=50;
 let customerPage=1,customerHasNext=false,totalCustomerCount=0,totalArchivedCount=0,customerCountByRep={},archivedCountByRep={},customerCountTimer=null,globalCustomerRows=null,searchTimer=null,adminEditorBaseline='',adminDraftTimer=null;
 let adminCustomerFormSaving=false;
+let customerLoadSequence=0, customerHasSnapshot=false, adminSubscriptionsStarted=false;
+let customerSessionStorage;try{customerSessionStorage=sessionStorage}catch(_){}
+const customerStore=createCustomerStore(base44.entities.VIPCustomer,{cacheKey:'mVIP_customer_snapshot_v1_admin',storage:customerSessionStorage});
 const LOG_PAGE_SIZE=100;
 let logPage=1,logHasNext=false;
 
@@ -39,7 +43,7 @@ function showAdminView(view,repUsername=''){
       document.getElementById('customerViewTitle').textContent=name+' 的客户';
       document.getElementById('customerViewDesc').textContent='只显示业务员 '+repUsername+' 登记的客户。';
     }
-    customerPage=1;loadCustomers({resetPage:true});return;
+    customerPage=1;return loadCustomers({resetPage:true});
   }
   if(view==='reps'){document.getElementById('view-reps').hidden=false;document.querySelector('.sidebar-item[data-view="reps"]').classList.add('active')}
   if(view==='fields'){document.getElementById('view-fields').hidden=false;document.querySelector('.sidebar-item[data-view="fields"]').classList.add('active')}
@@ -58,112 +62,27 @@ document.querySelector('.sidebar-item[data-view="logs"]').onclick=()=>showAdminV
 document.querySelector('.sidebar-item[data-view="backup"]').onclick=()=>showAdminView('backup');
 
 
-function integrityLogKey(x){
-  return x?.legacy_source_id
-    ?'l:'+String(x.legacy_source_id)
-    :'n:'+[
-      x?.action_type||'',x?.event_time||'',x?.customer_name||'',x?.target_label||'',x?.message||''
-    ].join('|');
-}
-async function runIntegrityRepairV2(){
-  const key='mVIP_integrity_repair_v2';
-  if(sessionStorage.getItem(key))return;
-  try{
-    const snapRows=unwrap(await base44.entities.VIPBusinessBackupSnapshot.filter({key:'main'},'-updated_date',1,0));
-    const entities=snapRows[0]?.payload?.entities||{};
-    if(!Array.isArray(entities.VIPActivityLog)||!Array.isArray(entities.VIPCustomer)||!Array.isArray(entities.VIPProgressStage)){
-      sessionStorage.setItem(key,'skip');return;
-    }
-
-    const [currentCustomers,currentProgress,currentLogs,currentFlows]=await Promise.all([
-      getAllEntityRecords('VIPCustomer'),
-      getAllEntityRecords('VIPProgressStage'),
-      getAllEntityRecords('VIPActivityLog'),
-      getAllEntityRecords('VIPWorkflowFlowProgress')
-    ]);
-
-    const customerByLegacy=new Map(currentCustomers.map(x=>[String(x.legacy_source_id||''),x]));
-    const progressByLegacy=new Map(currentProgress.map(x=>[String(x.legacy_source_id||''),x]));
-    const oldCustomerToCurrent=new Map();
-    const oldProgressToCurrent=new Map();
-    for(const x of entities.VIPCustomer||[]){
-      const cur=customerByLegacy.get(String(x.legacy_source_id||''));
-      if(x.__old_id&&cur?.id)oldCustomerToCurrent.set(String(x.__old_id),String(cur.id));
-    }
-    for(const x of entities.VIPProgressStage||[]){
-      const cur=progressByLegacy.get(String(x.legacy_source_id||''));
-      if(x.__old_id&&cur?.id)oldProgressToCurrent.set(String(x.__old_id),String(cur.id));
-    }
-
-    const expectedGroups=new Map();
-    for(const x of entities.VIPActivityLog||[]){
-      const k=integrityLogKey(x);
-      if(!expectedGroups.has(k))expectedGroups.set(k,[]);
-      expectedGroups.get(k).push(x);
-    }
-    const currentGroups=new Map();
-    for(const x of currentLogs){
-      if(x.migration_duplicate===true)continue;
-      const k=integrityLogKey(x);
-      if(!currentGroups.has(k))currentGroups.set(k,[]);
-      currentGroups.get(k).push(x);
-    }
-
-    for(const [k,expected] of expectedGroups){
-      const have=(currentGroups.get(k)||[]).sort((a,b)=>String(a.created_date||'').localeCompare(String(b.created_date||'')));
-      if(have.length>expected.length){
-        for(const extra of have.slice(expected.length)){
-          if(extra.migration_duplicate!==true){
-            await retryRateLimited(()=>base44.entities.VIPActivityLog.update(extra.id,{migration_duplicate:true}),8);
-            await waitMs(100);
-          }
-        }
-      }
-      if(have.length>=expected.length)continue;
-      const missing=expected.slice(have.length);
-      for(const source of missing){
-        const clean=withoutOldId(source);
-        if(clean.customer_id&&oldCustomerToCurrent.has(String(clean.customer_id)))clean.customer_id=oldCustomerToCurrent.get(String(clean.customer_id));
-        if(clean.target_key&&oldProgressToCurrent.has(String(clean.target_key)))clean.target_key=oldProgressToCurrent.get(String(clean.target_key));
-        await retryRateLimited(()=>base44.entities.VIPActivityLog.create(clean),8);
-        await waitMs(140);
-      }
-    }
-
-    const validCustomerIds=new Set(currentCustomers.filter(x=>x.duplicate_record!==true).map(x=>String(x.id)));
-    for(const row of currentFlows){
-      if(row.flow_id==='__orphan__'||!validCustomerIds.has(String(row.customer_id||''))){
-        try{await retryRateLimited(()=>base44.entities.VIPWorkflowFlowProgress.delete(row.id),8)}catch(_){}
-        await waitMs(120);
-      }
-    }
-
-    await reconcileDashboardStats(base44);
-    sessionStorage.setItem(key,'ok');
-  }catch(err){
-    console.warn('integrity repair deferred',err);
-  }
-}
-
 async function enter(){
   loginView.hidden=true;appView.hidden=false;
   document.getElementById('logDate').value=new Date().toISOString().slice(0,10);
-  await runIntegrityRepairV2();
-  await Promise.all([loadReps(),loadFields(),loadProgress(),loadLogs(),refreshCustomerCounts()]);
-  showAdminView('all');
+  // A normal page visit must never replay a historical backup or perform bulk writes.
+  await showAdminView('all');
+  await loadReps();await loadFields();await loadProgress();
+  if(customerHasSnapshot)renderCustomers();
+  if(adminSubscriptionsStarted)return;
+  adminSubscriptionsStarted=true;
   try{
-    let repTimer=0,fieldTimer=0,progressTimer=0,customerTimer=0,logTimer=0,statTimer=0;
-    base44.entities.VIPSalesRep.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(repTimer);repTimer=setTimeout(()=>loadReps(),450)});
-    base44.entities.VIPFormField.subscribe(()=>{if(window.MVIP_MAINTENANCE||dragSaving)return;clearTimeout(fieldTimer);fieldTimer=setTimeout(()=>{loadFields();loadCustomers()},500)});
-    base44.entities.VIPProgressStage.subscribe(()=>{if(window.MVIP_MAINTENANCE||progressDragSaving)return;clearTimeout(progressTimer);progressTimer=setTimeout(()=>{loadProgress();loadCustomers()},500)});
-    base44.entities.VIPCustomer.subscribe(evt=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(customerTimer);customerTimer=setTimeout(()=>smartCustomerSubscription({event:evt,customers,render:renderCustomers,load:()=>loadCustomers(),refreshCounts:scheduleCustomerCountRefresh,matches:r=>r?.duplicate_record!==true&&((currentView==='archive')===Boolean(r.archived))&&(!currentRepFilter||String(r.rep_username||'')===String(currentRepFilter))&&matchesAdminFilters(r)}),650)});
-    base44.entities.VIPDashboardStats.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(statTimer);statTimer=setTimeout(()=>refreshCustomerCounts(),450)});
-    base44.entities.VIPActivityLog.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(logTimer);logTimer=setTimeout(()=>loadLogs(),650)});
-  }catch(_){}
-  ensureCustomerIndex(base44,{},800).catch(()=>{});
-    initGlobalSearch({base44,role:'admin',onCustomer:openGlobalAdminCustomer,onWorkflow:()=>showAdminView('workflows')});
-    runDailyMaintenance(base44).then(()=>refreshCustomerCounts()).catch(()=>{});
+    let repTimer=0,fieldTimer=0,progressTimer=0,logTimer=0;
+    base44.entities.VIPSalesRep.subscribe(()=>{clearTimeout(repTimer);repTimer=setTimeout(()=>{if(!window.MVIP_MAINTENANCE)loadReps()},800)});
+    base44.entities.VIPFormField.subscribe(()=>{clearTimeout(fieldTimer);fieldTimer=setTimeout(async()=>{if(window.MVIP_MAINTENANCE||dragSaving)return;await loadFields();if(customerHasSnapshot)renderCustomers()},800)});
+    base44.entities.VIPProgressStage.subscribe(()=>{clearTimeout(progressTimer);progressTimer=setTimeout(async()=>{if(window.MVIP_MAINTENANCE||progressDragSaving)return;await loadProgress();if(customerHasSnapshot)renderCustomers()},800)});
+    subscribeCustomerRefresh(base44.entities.VIPCustomer,()=>loadCustomers({force:true}),{blocked:()=>!!window.MVIP_MAINTENANCE});
+    base44.entities.VIPActivityLog.subscribe(()=>{clearTimeout(logTimer);logTimer=setTimeout(()=>{if(!window.MVIP_MAINTENANCE&&currentView==='logs')loadLogs()},800)});
+  }catch(error){console.warn('Realtime updates unavailable',error)}
+  initGlobalSearch({base44,role:'admin',onCustomer:openGlobalAdminCustomer,onWorkflow:()=>showAdminView('workflows')});
+  window.addEventListener('online',()=>loadCustomers());
 }
+
 document.getElementById('adminLogin').onclick=async()=>{
   const p=document.getElementById('adminPassword').value;
   if(!p){showMessage(loginNote,'请输入管理员密码。','err');return}
@@ -173,9 +92,9 @@ document.getElementById('adminLogin').onclick=async()=>{
 
 async function loadReps(){
   try{
-    reps=unwrap(await base44.entities.VIPSalesRep.list({sort:'-created_date',limit:500}));
+    reps=recordRows(await retryRead(()=>base44.entities.VIPSalesRep.list('-created_date',500,0)));
     document.getElementById('salesCount').textContent=reps.length;
-    const rf=document.getElementById('adminRepFilter');if(rf)rf.innerHTML='<option value="">全部业务员</option>'+reps.map(r=>'<option value="'+esc(r.username)+'">'+esc(r.display_name||r.username)+'</option>').join('');
+    const rf=document.getElementById('adminRepFilter');if(rf){const selected=rf.value;rf.innerHTML='<option value="">全部业务员</option>'+reps.map(r=>'<option value="'+esc(r.username)+'">'+esc(r.display_name||r.username)+'</option>').join('');rf.value=selected;}
     renderReps();renderSidebar();
   }catch(err){document.getElementById('repList').innerHTML='<div class="notice err">读取业务员失败：'+esc(err?.message||String(err))+'</div>'}
 }
@@ -201,7 +120,7 @@ document.getElementById('createRep').onclick=async()=>{
   const username=document.getElementById('repUsername').value.trim(),display_name=document.getElementById('repDisplayName').value.trim(),note=document.getElementById('repNote');
   if(!username){showMessage(note,'请输入业务员用户名。','err');return}
   try{
-    const current=unwrap(await base44.entities.VIPSalesRep.list({sort:'-created_date',limit:500}));
+    const current=recordRows(await retryRead(()=>base44.entities.VIPSalesRep.list('-created_date',500,0)));
     if(current.some(r=>String(r.username||'').toLowerCase()===username.toLowerCase())){showMessage(note,'这个用户名已经存在。','err');return}
     await base44.entities.VIPSalesRep.create({username,display_name});showMessage(note,'业务员用户名已创建：'+username,'ok');
     document.getElementById('repUsername').value='';document.getElementById('repDisplayName').value='';await loadReps()
@@ -210,7 +129,7 @@ document.getElementById('createRep').onclick=async()=>{
 
 async function loadFields(){
   try{
-    fields=unwrap(await base44.entities.VIPFormField.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
+    fields=recordRows(await retryRead(()=>base44.entities.VIPFormField.list('order',500,0))).sort((a,b)=>(a.order||0)-(b.order||0));
     const activeCount=fields.filter(f=>f.active!==false).length;
     document.getElementById('activeFields').textContent=activeCount;document.getElementById('sidebarFieldCount').textContent=activeCount;
     renderFields();
@@ -353,8 +272,8 @@ document.getElementById('addField').onclick=async()=>{
 
 async function loadProgress(){
   try{
-    progressStages=unwrap(await base44.entities.VIPProgressStage.list({sort:'order',limit:500})).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
-    document.getElementById('sidebarProgressCount').textContent=progressStages.length;const pf=document.getElementById('adminProgressFilter');if(pf)pf.innerHTML='<option value="">全部进度</option>'+progressStages.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join('');renderProgress();
+    progressStages=recordRows(await retryRead(()=>base44.entities.VIPProgressStage.list('order',500,0))).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
+    document.getElementById('sidebarProgressCount').textContent=progressStages.length;const pf=document.getElementById('adminProgressFilter');if(pf){const selected=pf.value;pf.innerHTML='<option value="">全部进度</option>'+progressStages.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join('');pf.value=selected;}renderProgress();
   }catch(err){document.getElementById('progressList').innerHTML='<div class="notice err">读取客户进度失败：'+esc(err?.message||String(err))+'</div>'}
 }
 function renderProgress(){
@@ -561,7 +480,7 @@ const BACKUP_ENTITY_NAMES=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPC
 async function getAllEntityRecords(entityName){
   const all=[];let skip=0;
   while(true){
-    const part=unwrap(await base44.entities[entityName].list({sort:'created_date',limit:500,skip}));
+    const part=unwrap(await base44.entities[entityName].list('created_date',500,skip));
     all.push(...part);
     if(part.length<500)break;
     skip+=500;
@@ -727,7 +646,7 @@ async function exportFullBackup(){
 
 async function wipeEntity(entityName){
   while(true){
-    const rows=unwrap(await base44.entities[entityName].list({limit:500}));
+    const rows=unwrap(await base44.entities[entityName].list('id',500,0));
     if(!rows.length)break;
     for(const row of rows)await base44.entities[entityName].delete(row.id);
   }
@@ -814,7 +733,7 @@ async function restoreEntities(entities,workflowAssetUrlMap={}){
     if(old&&id)progressMap[String(old)]=String(id);
   }
   if(Object.keys(progressMap).length!==(e.VIPProgressStage||[]).length){
-    const restored=unwrap(await base44.entities.VIPProgressStage.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
+    const restored=recordRows(await retryRead(()=>base44.entities.VIPProgressStage.list('order',500,0))).sort((a,b)=>(a.order||0)-(b.order||0));
     const original=[...(e.VIPProgressStage||[])].sort((a,b)=>(a.order||0)-(b.order||0));
     original.forEach((row,i)=>{if(row.__old_id&&restored[i]?.id)progressMap[String(row.__old_id)]=String(restored[i].id)});
   }
@@ -962,7 +881,7 @@ async function restoreToolboxSnapshot(repository,token,note){
 
 async function importFullBackup(file){
   const note=document.getElementById('backupNote');
-  window.MVIP_MAINTENANCE=true;
+  window.MVIP_MAINTENANCE=true;++customerLoadSequence;
   try{
     showMessage(note,'正在检查备份文件完整性…','warn');
     const raw=JSON.parse(await file.text());
@@ -1017,14 +936,14 @@ async function importFullBackup(file){
   }catch(err){
     showMessage(note,'恢复未完成：'+(err?.message||String(err))+'。如已进入恢复阶段，请使用刚刚自动下载的“恢复前安全备份”再次恢复。','err');
   }finally{
-    window.MVIP_MAINTENANCE=false;
+    window.MVIP_MAINTENANCE=false;void loadCustomers({resetPage:true});
   }
 }
 
 async function ensureAdminSearchIndex(){
   const all=[];let skip=0;
   while(true){
-    const batch=unwrap(await base44.entities.VIPCustomer.list({sort:'-created_date',limit:200,skip}));
+    const batch=unwrap(await base44.entities.VIPCustomer.list('-created_date',200,skip));
     all.push(...batch);if(batch.length<200)break;skip+=200;if(skip>10000)break;
   }
   const missing=all.filter(r=>String(r.search_text||'')!==buildCustomerSearchText(r.rep_username,r.data||{}));
@@ -1382,7 +1301,7 @@ async function clearBusinessDataFromSafetySnapshot(safety,note){
 
 async function importBusinessBackup(file){
   const note=document.getElementById('backupNote');
-  window.MVIP_MAINTENANCE=true;
+  window.MVIP_MAINTENANCE=true;++customerLoadSequence;
   try{
     showMessage(note,'正在校验业务数据备份…','warn');
     const raw=JSON.parse(await file.text());
@@ -1439,7 +1358,7 @@ async function importBusinessBackup(file){
   }catch(err){
     showMessage(note,'业务数据恢复失败：'+(err?.message||String(err)),'err');
   }finally{
-    window.MVIP_MAINTENANCE=false;
+    window.MVIP_MAINTENANCE=false;void loadCustomers({resetPage:true});
   }
 }
 
@@ -1699,7 +1618,7 @@ async function restoreRepositoryFromZip(zip,manifest,token,note){
 }
 async function importV5Backup(file){
   const note=document.getElementById('backupNote');
-  window.MVIP_MAINTENANCE=true;
+  window.MVIP_MAINTENANCE=true;++customerLoadSequence;
   try{
     const JSZip=await getJSZip();
     showMessage(note,'正在读取 V5 ZIP 备份…','warn');
@@ -1744,11 +1663,11 @@ async function importV5Backup(file){
 
     await restoreRepositoryFromZip(zip,manifest,token,note);
 
-    window.MVIP_MAINTENANCE=false;
+    window.MVIP_MAINTENANCE=false;void loadCustomers({resetPage:true});
     await Promise.all([loadReps(),loadFields(),loadProgress(),loadCustomers({resetPage:true}),loadLogs(true),refreshCustomerCounts()]);
     showMessage(note,'V5 完整恢复已提交：Base44 数据和整个 GitHub 仓库都已恢复。GitHub Pages 正在自动重新部署；部署完成后刷新页面即可。','ok');
   }catch(err){
-    window.MVIP_MAINTENANCE=false;
+    window.MVIP_MAINTENANCE=false;void loadCustomers({resetPage:true});
     showMessage(note,'V5 恢复未完成：'+(err?.message||String(err))+'。如果已经进入恢复阶段，请使用刚才自动下载的“V5 恢复前安全备份”。','err');
   }
 }
@@ -1790,69 +1709,46 @@ function matchesAdminFilters(r){
   if(country&&!hay.includes(country))return false;
   return true;
 }
-async function fetchCustomerPage(){
-  if(adminFilterActive()){
-    globalCustomerRows=null;const skip=(customerPage-1)*CUSTOMER_PAGE_SIZE;
-    try{
-      const rows=unwrap(await base44.entities.VIPCustomer.filter(adminServerQuery(),'-admin_sort_score',CUSTOMER_PAGE_SIZE+1,skip));
-      customerHasNext=rows.length>CUSTOMER_PAGE_SIZE;customers=rows.slice(0,CUSTOMER_PAGE_SIZE);
-    }catch(err){
-      globalCustomerRows=null;
-      throw new Error('服务器筛选暂时不可用，请稍后重试。'+(err?.message?' '+err.message:''));
-    }
-  }else{
-    globalCustomerRows=null;const skip=(customerPage-1)*CUSTOMER_PAGE_SIZE;
-    const rows=unwrap(await base44.entities.VIPCustomer.filter(adminBaseQuery(),'-admin_sort_score',CUSTOMER_PAGE_SIZE+1,skip));
-    customerHasNext=rows.length>CUSTOMER_PAGE_SIZE;customers=rows.slice(0,CUSTOMER_PAGE_SIZE);
-  }
-  if(!customers.length&&customerPage>1){customerPage--;return fetchCustomerPage()}
+function applyCustomerSnapshot(snapshot){
+  const rep=currentView==='rep'?currentRepFilter:(document.getElementById('adminRepFilter')?.value||'');
+  const selected=selectCustomerPage(snapshot.rows,{archived:currentView==='archive',repUsername:rep,matches:matchesAdminFilters,sort:'admin_sort_score',page:customerPage,pageSize:CUSTOMER_PAGE_SIZE});
+  customers=selected.rows;globalCustomerRows=selected.filtered;customerPage=selected.page;customerHasNext=selected.hasNext;
+  customerHasSnapshot=true;
+  applyCustomerCounts(snapshot.rows);
+  renderCustomers();
 }
-async function refreshCustomerCounts(){
-  const verifyKey='mVIP_counts_verified_v3';
-  if(!sessionStorage.getItem(verifyKey)){
-    try{await reconcileDashboardStats(base44);sessionStorage.setItem(verifyKey,'1')}catch(_){}
-  }
-  let rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'-updated_date',limit:500}));
-  const latestByKey=new Map();
-  for(const row of rows){const key=String(row.key||'');if(key&&!latestByKey.has(key))latestByKey.set(key,row)}
-  let global=latestByKey.get('global');
-  try{
-    const newest=unwrap(await base44.entities.VIPCustomer.list({sort:'-updated_date',limit:1}))[0];
-    const statTime=String(global?.updated_at||global?.updated_date||'');
-    const customerTime=String(newest?.updated_date||'');
-    if(!global||(customerTime&&customerTime>statTime)){
-      await reconcileDashboardStats(base44);
-      rows=unwrap(await base44.entities.VIPDashboardStats.list({sort:'-updated_date',limit:500}));
-      latestByKey.clear();
-      for(const row of rows){const key=String(row.key||'');if(key&&!latestByKey.has(key))latestByKey.set(key,row)}
-      global=latestByKey.get('global');
-    }
-  }catch(_){}
-  if(global){
-    totalCustomerCount=Number(global.active_customers||0);
-    totalArchivedCount=Number(global.archived_customers||0);
-    customerCountByRep={};archivedCountByRep={};
-    [...latestByKey.values()].filter(x=>x.scope==='rep').forEach(x=>{
-      customerCountByRep[String(x.rep_username||'')]=Number(x.active_customers||0);
-      archivedCountByRep[String(x.rep_username||'')]=Number(x.archived_customers||0);
-    });
-  }else{
-    const all=[];let skip=0;
-    while(true){const batch=unwrap(await base44.entities.VIPCustomer.list({sort:'-created_date',limit:500,skip}));all.push(...batch);if(batch.length<500)break;skip+=500}
-    let active=0,archived=0,counts={},archiveCounts={};
-    for(const row of all){if(row.duplicate_record===true)continue;const key=String(row.rep_username||'');if(row.archived===true){archived++;archiveCounts[key]=(archiveCounts[key]||0)+1}else{active++;counts[key]=(counts[key]||0)+1}}
-    totalCustomerCount=active;totalArchivedCount=archived;customerCountByRep=counts;archivedCountByRep=archiveCounts;
-  }
-  document.getElementById('totalCustomers').textContent=totalCustomerCount;document.getElementById('allCustomerCount').textContent=totalCustomerCount;
-  document.getElementById('archivedCustomerCount').textContent=totalArchivedCount;document.getElementById('archivedCustomersStat').textContent=totalArchivedCount;
+async function fetchCustomerPage(options){return customerStore.read(options)}
+function applyCustomerCounts(rows){
+  let active=0,archived=0,counts={},archiveCounts={};
+  for(const row of rows){if(row.duplicate_record===true)continue;const key=String(row.rep_username||'');if(row.archived===true){archived++;archiveCounts[key]=(archiveCounts[key]||0)+1}else{active++;counts[key]=(counts[key]||0)+1}}
+  totalCustomerCount=active;totalArchivedCount=archived;customerCountByRep=counts;archivedCountByRep=archiveCounts;
+  document.getElementById('totalCustomers').textContent=active;document.getElementById('allCustomerCount').textContent=active;
+  document.getElementById('archivedCustomerCount').textContent=archived;document.getElementById('archivedCustomersStat').textContent=archived;
   renderSidebar();renderReps();
 }
-function scheduleCustomerCountRefresh(){clearTimeout(customerCountTimer);customerCountTimer=setTimeout(()=>refreshCustomerCounts().catch(()=>{}),1000)}
-async function loadCustomers({resetPage=false,refreshCounts=false}={}){
-  if(resetPage)customerPage=1;
-  try{await fetchCustomerPage();renderCustomers();if(refreshCounts)await refreshCustomerCounts()}
-  catch(err){document.getElementById('customerList').innerHTML='<div class="notice err">读取客户失败：'+esc(err?.message||String(err))+'</div>'}
+async function refreshCustomerCounts(){
+  const snapshot=customerStore.peek();
+  if(snapshot)applyCustomerCounts(snapshot.rows);
 }
+function scheduleCustomerCountRefresh(){clearTimeout(customerCountTimer);customerCountTimer=setTimeout(()=>loadCustomers(),1000)}
+async function loadCustomers({resetPage=false,refreshCounts=false,force=false}={}){
+  if(window.MVIP_MAINTENANCE)return;
+  const sequence=++customerLoadSequence,box=document.getElementById('customerList');
+  if(resetPage)customerPage=1;
+  const saved=customerStore.peek();
+  if(saved)applyCustomerSnapshot(saved);
+  customerNotice(box,saved?'正在更新客户，当前显示上次成功读取的数据…':'正在读取客户资料…');
+  try{
+    const snapshot=await fetchCustomerPage({fresh:force||refreshCounts});
+    if(sequence!==customerLoadSequence||window.MVIP_MAINTENANCE)return;
+    applyCustomerSnapshot(snapshot);
+    customerNotice(box,snapshot.stale?'暂时无法连接服务器，保留上次成功读取的数据（'+new Date(snapshot.at).toLocaleTimeString()+'），请重试。':'',snapshot.stale?()=>loadCustomers():null);
+  }catch(error){
+    if(sequence!==customerLoadSequence)return;
+    customerNotice(box,'客户读取失败，'+(customerHasSnapshot?'已保留之前显示的资料。':'尚未取得客户资料，不能判断为零客户。')+' '+(error?.message||''),()=>loadCustomers());
+  }
+}
+
 function getVisibleCustomers(){return customers}
 function adminPagerHtml(){
   const total=globalCustomerRows?globalCustomerRows.length:(currentView==='archive'?totalArchivedCount:(currentView==='rep'?(customerCountByRep[currentRepFilter]||0):totalCustomerCount));
@@ -1991,5 +1887,6 @@ document.getElementById('refreshLogs').onclick=()=>loadLogs(true);
 document.getElementById('exportBackup').onclick=exportBusinessBackup;
 document.getElementById('importBackup').onclick=()=>document.getElementById('backupFile').click();
 document.getElementById('backupFile').onchange=async e=>{const file=e.target.files?.[0];if(file)await importAnyBackup(file);e.target.value=''};
-document.getElementById('logoutBtn').onclick=()=>{localStorage.removeItem('mVIP_admin');location.reload()};
+document.getElementById('logoutBtn').onclick=()=>{customerStore.clear();localStorage.removeItem('mVIP_admin');location.reload()};
 if(localStorage.getItem('mVIP_admin')==='1')enter();
+

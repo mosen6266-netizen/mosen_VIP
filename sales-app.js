@@ -1,34 +1,50 @@
 import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, uiAlert, uiConfirm, uiPrompt, localDateKey, buildCustomerSearchText, readDashboardStat, adjustDashboardStat, createEntityBatch } from './base44.js';
-import { customerSearchFields, ensureCustomerIndex, initGlobalSearch, smartCustomerSubscription } from './vip-optimizations.js?v=20260929-countfix3';
+import { customerSearchFields, initGlobalSearch } from './vip-optimizations.js?v=20260929-stable-load1';
+import { createCustomerStore, customerPage as selectCustomerPage, customerNotice, subscribeCustomerRefresh, retryRead, recordRows } from './customer-loader.js?v=20260929-stable-load1';
 let username=localStorage.getItem('mVIP_rep_username')||'',displayName=localStorage.getItem('mVIP_rep_display_name')||'',fields=[],customers=[],progressStages=[],editingId=null;
 const CUSTOMER_PAGE_SIZE=50;
 let customerPage=1,customerHasNext=false,myCustomerTotal=0,myArchivedTotal=0,myTodayTotal=0,customerCountTimer=null;
 let customerMode='active',globalCustomerRows=null,searchTimer=null,editorBaseline='',draftTimer=null;
-let salesFormSaving=false;
+let salesFormSaving=false,customerLoadSequence=0,customerHasSnapshot=false,salesSubscriptionsStarted=false;
+let customerSessionStorage;try{customerSessionStorage=sessionStorage}catch(_){}
+const customerStore=createCustomerStore(base44.entities.VIPCustomer,{repUsername:username,cacheKey:'mVIP_customer_snapshot_v1_sales:'+username,storage:customerSessionStorage});
 const modal=document.getElementById('modal'),form=document.getElementById('customerForm'),note=document.getElementById('formNote'),list=document.getElementById('customerList');
 function unwrap(v){return Array.isArray(v)?v:(v?.items||[])}
 async function boot(){
   if(!username){location.href='./login.html';return}
   try{
-    const reps=unwrap(await base44.entities.VIPSalesRep.list({sort:'-created_date',limit:500}));const rep=reps.find(r=>String(r.username||'').toLowerCase()===username.toLowerCase());
-    if(!rep){localStorage.removeItem('mVIP_rep_username');location.href='./login.html';return}
+    const reps=recordRows(await retryRead(()=>base44.entities.VIPSalesRep.filter({username},'-created_date',500,0)));
+    const rep=reps.find(r=>String(r.username||'')===username);
+    if(!rep){customerStore.clear();localStorage.removeItem('mVIP_rep_username');location.href='./login.html';return}
     displayName=rep.display_name||rep.username;document.getElementById('who').textContent=displayName;document.getElementById('repLabel').textContent=username;
-    await Promise.all([loadFields(),loadProgress(),refreshMyCustomerCounts(),loadCustomers({resetPage:true})]);
-    try{
-      let fieldTimer=0,progressTimer=0,customerTimer=0,repTimer=0;
-      base44.entities.VIPFormField.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(fieldTimer);fieldTimer=setTimeout(()=>loadFields(),450)});
-      base44.entities.VIPProgressStage.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(progressTimer);progressTimer=setTimeout(()=>{loadProgress();loadCustomers()},500)});
-      base44.entities.VIPCustomer.subscribe(evt=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(customerTimer);customerTimer=setTimeout(()=>smartCustomerSubscription({event:evt,customers,render:renderCustomers,load:()=>loadCustomers(),refreshCounts:scheduleMyCustomerCountRefresh,matches:r=>r?.duplicate_record!==true&&String(r.rep_username||'')===username&&Boolean(r.archived)===(customerMode==='archive')&&matchesSalesFilters(r)}),650)});
-      base44.entities.VIPDashboardStats.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;scheduleMyCustomerCountRefresh()});
-      base44.entities.VIPSalesRep.subscribe(()=>{if(window.MVIP_MAINTENANCE)return;clearTimeout(repTimer);repTimer=setTimeout(()=>verifyRep(),500)});
-    }catch(_){}
-    ensureCustomerIndex(base44,{rep_username:username},600).catch(()=>{});
-    initGlobalSearch({base44,role:'sales',repUsername:username,onCustomer:row=>openForm(row),onWorkflow:(flow,step)=>navigator.clipboard?.writeText(step.contentForeign||step.contentZh||'')});
-  }catch(_){location.href='./login.html'}
+  }catch(error){const saved=customerStore.peek();if(saved)applyCustomerSnapshot(saved);customerNotice(list,'账号验证暂时失败，'+(saved?'当前显示上次成功读取的数据。':'尚未取得客户资料。')+'请重试。'+(error?.message||''),()=>boot());return}
+  await loadCustomers({resetPage:true});
+  await reloadSalesMetadata(loadFields);await reloadSalesMetadata(loadProgress);
+  if(salesSubscriptionsStarted)return;
+  salesSubscriptionsStarted=true;
+  try{
+    let fieldTimer=0,progressTimer=0,repTimer=0;
+    base44.entities.VIPFormField.subscribe(()=>{clearTimeout(fieldTimer);fieldTimer=setTimeout(()=>{if(!window.MVIP_MAINTENANCE)reloadSalesMetadata(loadFields)},800)});
+    base44.entities.VIPProgressStage.subscribe(()=>{clearTimeout(progressTimer);progressTimer=setTimeout(()=>{if(!window.MVIP_MAINTENANCE)reloadSalesMetadata(loadProgress)},800)});
+    subscribeCustomerRefresh(base44.entities.VIPCustomer,()=>loadCustomers({force:true}),{blocked:()=>!!window.MVIP_MAINTENANCE});
+    base44.entities.VIPSalesRep.subscribe(()=>{clearTimeout(repTimer);repTimer=setTimeout(()=>verifyRep(),800)});
+  }catch(error){console.warn('Realtime updates unavailable',error)}
+  initGlobalSearch({base44,role:'sales',repUsername:username,onCustomer:row=>openForm(row),onWorkflow:(flow,step)=>navigator.clipboard?.writeText(step.contentForeign||step.contentZh||'')});
+  window.addEventListener('online',()=>loadCustomers());
 }
-async function verifyRep(){const reps=unwrap(await base44.entities.VIPSalesRep.list({sort:'-created_date',limit:500}));if(!reps.some(r=>String(r.username||'').toLowerCase()===username.toLowerCase())){localStorage.removeItem('mVIP_rep_username');location.href='./login.html'}}
-async function loadFields(){fields=unwrap(await base44.entities.VIPFormField.list({sort:'order',limit:500})).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));document.getElementById('fieldCount').textContent=fields.length;renderForm()}
-async function loadProgress(){progressStages=unwrap(await base44.entities.VIPProgressStage.list({sort:'order',limit:500})).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));renderProgressChecklist();const sel=document.getElementById('salesProgressFilter');if(sel)sel.innerHTML='<option value="">全部进度</option>'+progressStages.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join('')}
+async function reloadSalesMetadata(load){
+  try{await retryRead(load);if(customerHasSnapshot)renderCustomers()}
+  catch(error){customerNotice(list,'登记字段或进度暂时读取失败，已保留客户列表。',()=>reloadSalesMetadata(load))}
+}
+async function verifyRep(){
+  try{
+    const reps=recordRows(await retryRead(()=>base44.entities.VIPSalesRep.filter({username},'-created_date',500,0)));
+    if(!reps.some(r=>String(r.username||'')===username)){customerStore.clear();localStorage.removeItem('mVIP_rep_username');location.href='./login.html'}
+  }catch(error){console.warn('Rep verification deferred',error)}
+}
+
+async function loadFields(){fields=recordRows(await base44.entities.VIPFormField.list('order',500,0)).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));document.getElementById('fieldCount').textContent=fields.length;renderForm()}
+async function loadProgress(){progressStages=recordRows(await base44.entities.VIPProgressStage.list('order',500,0)).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));renderProgressChecklist();const sel=document.getElementById('salesProgressFilter');if(sel){const selected=sel.value;sel.innerHTML='<option value="">全部进度</option>'+progressStages.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join('');sel.value=selected;}}
 async function ensureSearchIndex(){
   const all=[];let skip=0;
   while(true){
@@ -96,69 +112,39 @@ function matchesSalesFilters(r){
   if(country&&!hay.includes(country))return false;
   return true;
 }
-async function refreshMyCustomerCounts(){
-  let stat=await readDashboardStat('rep:'+username);
-  const verifyKey='mVIP_rep_counts_verified_v3_'+username;
-  let shouldRecount=!stat||!sessionStorage.getItem(verifyKey);
-  try{
-    const newest=unwrap(await base44.entities.VIPCustomer.filter({rep_username:username,duplicate_record:{$ne:true}},'-updated_date',1,0))[0];
-    const statTime=String(stat?.updated_at||stat?.updated_date||'');
-    const customerTime=String(newest?.updated_date||'');
-    if(customerTime&&customerTime>statTime)shouldRecount=true;
-  }catch(_){}
-  if(shouldRecount){
-    const all=await fetchAllSalesCustomers({rep_username:username,duplicate_record:{$ne:true}});
-    const today=localDateKey();
-    const counted={
-      active_customers:all.filter(x=>x.archived!==true).length,
-      archived_customers:all.filter(x=>x.archived===true).length,
-      today_active_customers:all.filter(x=>x.archived!==true&&localDateKey(x.created_date)===today).length
-    };
-    stat={...(stat||{}),...counted};
-    sessionStorage.setItem(verifyKey,'1');
-    try{
-      const payload={key:'rep:'+username,scope:'rep',rep_username:username,...counted,updated_at:new Date().toISOString(),version:Number(stat?.version||0)+1};
-      if(stat?.id)await base44.entities.VIPDashboardStats.update(stat.id,payload);
-      else await base44.entities.VIPDashboardStats.create(payload);
-    }catch(_){}
-  }
-  myCustomerTotal=Number(stat.active_customers||0);
-  myArchivedTotal=Number(stat.archived_customers||0);
-  myTodayTotal=Number(stat.today_active_customers||0);
-  document.getElementById('myCount').textContent=myCustomerTotal;
-  document.getElementById('todayCount').textContent=myTodayTotal;
-  document.getElementById('activeCustomerTabCount').textContent=myCustomerTotal;
-  document.getElementById('archiveCustomerTabCount').textContent=myArchivedTotal;
+function applyMyCustomerCounts(rows){
+  const today=localDateKey();
+  myCustomerTotal=rows.filter(r=>r.archived!==true).length;
+  myArchivedTotal=rows.filter(r=>r.archived===true).length;
+  myTodayTotal=rows.filter(r=>r.archived!==true&&localDateKey(r.created_date)===today).length;
+  document.getElementById('myCount').textContent=myCustomerTotal;document.getElementById('todayCount').textContent=myTodayTotal;
+  document.getElementById('activeCustomerTabCount').textContent=myCustomerTotal;document.getElementById('archiveCustomerTabCount').textContent=myArchivedTotal;
 }
-function scheduleMyCustomerCountRefresh(){
-  clearTimeout(customerCountTimer);customerCountTimer=setTimeout(()=>refreshMyCustomerCounts().catch(()=>{}),1000);
+async function refreshMyCustomerCounts(){const snapshot=customerStore.peek();if(snapshot)applyMyCustomerCounts(snapshot.rows)}
+function scheduleMyCustomerCountRefresh(){clearTimeout(customerCountTimer);customerCountTimer=setTimeout(()=>loadCustomers(),1000)}
+function applyCustomerSnapshot(snapshot){
+  const selected=selectCustomerPage(snapshot.rows,{archived:customerMode==='archive',repUsername:username,matches:matchesSalesFilters,page:customerPage,pageSize:CUSTOMER_PAGE_SIZE});
+  customers=selected.rows;globalCustomerRows=selected.filtered;customerPage=selected.page;customerHasNext=selected.hasNext;
+  customerHasSnapshot=true;applyMyCustomerCounts(snapshot.rows);renderCustomers();
 }
-async function loadCustomers({resetPage=false,refreshCounts=false}={}){
+async function loadCustomers({resetPage=false,refreshCounts=false,force=false}={}){
+  if(window.MVIP_MAINTENANCE)return;
+  const sequence=++customerLoadSequence;
   if(resetPage)customerPage=1;
+  const saved=customerStore.peek();
+  if(saved)applyCustomerSnapshot(saved);
+  customerNotice(list,saved?'正在更新客户，当前显示上次成功读取的数据…':'正在读取客户资料…');
   try{
-    if(salesFilterActive()){
-      globalCustomerRows=null;
-      const skip=(customerPage-1)*CUSTOMER_PAGE_SIZE;
-      try{
-        const rows=unwrap(await base44.entities.VIPCustomer.filter(salesServerQuery(),'-created_date',CUSTOMER_PAGE_SIZE+1,skip));
-        customerHasNext=rows.length>CUSTOMER_PAGE_SIZE;
-        customers=rows.slice(0,CUSTOMER_PAGE_SIZE);
-      }catch(err){
-        globalCustomerRows=null;
-        throw new Error('服务器筛选暂时不可用，请稍后重试。'+(err?.message?' '+err.message:''));
-      }
-      if(!customers.length&&customerPage>1){customerPage--;return loadCustomers({refreshCounts})}
-    }else{
-      globalCustomerRows=null;
-      const skip=(customerPage-1)*CUSTOMER_PAGE_SIZE;
-      const rows=unwrap(await base44.entities.VIPCustomer.filter(salesBaseQuery(),'-created_date',CUSTOMER_PAGE_SIZE+1,skip));
-      customerHasNext=rows.length>CUSTOMER_PAGE_SIZE;
-      customers=rows.slice(0,CUSTOMER_PAGE_SIZE);
-      if(!customers.length&&customerPage>1){customerPage--;return loadCustomers({refreshCounts})}
-    }
-    renderCustomers();if(refreshCounts)await refreshMyCustomerCounts();
-  }catch(err){list.innerHTML='<div class="notice err">读取客户失败：'+esc(err?.message||String(err))+'</div>'}
+    const snapshot=await customerStore.read({fresh:force||refreshCounts});
+    if(sequence!==customerLoadSequence||window.MVIP_MAINTENANCE)return;
+    applyCustomerSnapshot(snapshot);
+    customerNotice(list,snapshot.stale?'暂时无法连接服务器，保留上次成功读取的数据（'+new Date(snapshot.at).toLocaleTimeString()+'），请重试。':'',snapshot.stale?()=>loadCustomers():null);
+  }catch(error){
+    if(sequence!==customerLoadSequence)return;
+    customerNotice(list,'客户读取失败，'+(customerHasSnapshot?'已保留之前显示的资料。':'尚未取得客户资料，不能判断为零客户。')+' '+(error?.message||''),()=>loadCustomers());
+  }
 }
+
 function salesPagerHtml(){
   const total=globalCustomerRows?globalCustomerRows.length:(customerMode==='archive'?myArchivedTotal:myCustomerTotal);
   return '<div class="customer-pager"><div class="customer-pager-info">第 <b>'+customerPage+'</b> 页 · 每页 '+CUSTOMER_PAGE_SIZE+' 条 · '+(customerMode==='archive'?'归档客户 ':'我的客户 ')+total+' 条</div><div class="customer-pager-actions"><button id="salesPrevPage" class="btn soft" '+(customerPage<=1?'disabled':'')+'>上一页</button><button id="salesNextPage" class="btn soft" '+(!customerHasNext?'disabled':'')+'>下一页</button></div></div>';
@@ -458,5 +444,6 @@ document.getElementById('clearSalesFilters').onclick=()=>{document.getElementByI
 ['salesStarFilter','salesProgressFilter','salesCountryFilter'].forEach(id=>document.getElementById(id).addEventListener('change',()=>loadCustomers({resetPage:true})));
 document.getElementById('salesCountryFilter').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadCustomers({resetPage:true}),450)});
 document.getElementById('search').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadCustomers({resetPage:true}),450)};
-document.getElementById('logoutBtn').onclick=async()=>{if(editorDirty()&&!await uiConfirm('当前有未保存内容，退出后草稿仍保留在本机。',{title:'确认退出',confirmText:'退出登录',danger:true}))return;localStorage.removeItem('mVIP_rep_username');localStorage.removeItem('mVIP_rep_display_name');location.href='./login.html'};
+document.getElementById('logoutBtn').onclick=async()=>{if(editorDirty()&&!await uiConfirm('当前有未保存内容，退出后草稿仍保留在本机。',{title:'确认退出',confirmText:'退出登录',danger:true}))return;customerStore.clear();localStorage.removeItem('mVIP_rep_username');localStorage.removeItem('mVIP_rep_display_name');location.href='./login.html'};
 boot();
+

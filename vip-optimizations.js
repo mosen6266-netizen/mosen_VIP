@@ -1,4 +1,5 @@
 import { buildCustomerSearchText, createEntityBatch } from './base44.js';
+import { readCustomerSnapshot, recordRows } from './customer-loader.js?v=20260929-stable-load1';
 
 const DAY = 86400000;
 const norm = v => String(v ?? '').normalize('NFKC').trim().toLowerCase();
@@ -47,7 +48,7 @@ export async function ensureCustomerIndex(base44, query={}, maxRows=800){
 }
 async function upsertStat(base44,key,payload,scanStartedAt=''){
   const found=await base44.entities.VIPDashboardStats.filter({key},'-updated_date',50,0);
-  const rows=Array.isArray(found)?found:(found?.items||[]);
+  const rows=recordRows(found);
   const row=rows[0]||null;
   if(row&&scanStartedAt&&String(row.updated_at||row.updated_date||'')>scanStartedAt)return {skipped:true,row};
   const next={key,...payload,updated_at:new Date().toISOString(),version:Number(row?.version||0)+1};
@@ -58,13 +59,18 @@ async function upsertStat(base44,key,payload,scanStartedAt=''){
   for(const extra of rows.slice(1)){try{await base44.entities.VIPDashboardStats.delete(extra.id)}catch(_){}}
   return {skipped:false,next};
 }
-export async function reconcileDashboardStats(base44){
+const reconciliationJobs=new WeakMap();
+export function reconcileDashboardStats(base44){
+  if(reconciliationJobs.has(base44))return reconciliationJobs.get(base44);
+  const job=reconcileDashboardStatsOnce(base44).finally(()=>reconciliationJobs.delete(base44));
+  reconciliationJobs.set(base44,job);return job;
+}
+async function reconcileDashboardStatsOnce(base44){
   const scanStartedAt=new Date().toISOString();
-  const counts=new Map();let active=0,archived=0,today=0,skip=0;
+  const counts=new Map();let active=0,archived=0,today=0;
   const d=new Date(),todayKey=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
-  while(true){
-    const batch=await base44.entities.VIPCustomer.list({sort:'-created_date',limit:500,skip});
-    const rows=Array.isArray(batch)?batch:(batch?.items||[]);
+  // Finish and validate the entire read before writing any derived counters.
+  const rows=await readCustomerSnapshot(base44.entities.VIPCustomer);
     for(const r of rows){
       if(r.duplicate_record===true)continue;
       const rep=String(r.rep_username||''), x=counts.get(rep)||{active:0,archived:0,today:0};
@@ -72,16 +78,14 @@ export async function reconcileDashboardStats(base44){
       else{active++;x.active++;const cd=String(r.created_date||'').slice(0,10);if(cd===todayKey){today++;x.today++}}
       counts.set(rep,x);
     }
-    if(rows.length<500)break;skip+=rows.length;if(skip>100000)break;
-  }
   await upsertStat(base44,'global',{scope:'global',rep_username:'',active_customers:active,archived_customers:archived,today_active_customers:today},scanStartedAt);
   for(const [rep,x] of counts) await upsertStat(base44,'rep:'+rep,{scope:'rep',rep_username:rep,active_customers:x.active,archived_customers:x.archived,today_active_customers:x.today},scanStartedAt);
 
   // Remove stale/duplicate derived statistic rows that no longer correspond to actual customers.
   // This prevents old imported cache rows from overriding correct per-rep counts.
   try{
-    const statRowsRaw=await base44.entities.VIPDashboardStats.list({sort:'-updated_date',limit:500});
-    const statRows=Array.isArray(statRowsRaw)?statRowsRaw:(statRowsRaw?.items||[]);
+    const statRowsRaw=await base44.entities.VIPDashboardStats.list('-updated_date',500,0);
+    const statRows=recordRows(statRowsRaw);
     const wanted=new Set(['global',...Array.from(counts.keys(),rep=>'rep:'+rep)]);
     const kept=new Set();
     for(const r of statRows){
@@ -181,17 +185,8 @@ export function initGlobalSearch({base44,role='admin',repUsername='',onCustomer,
   document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();overlay?close():open()}else if(e.key==='Escape'&&overlay)close()});
   return {open,close};
 }
-export function smartCustomerSubscription({event,customers,render,load,refreshCounts,matches}){
-  try{
-    const record=event?.data||event?.record||event?.entity||event?.item||null;
-    if(record&&record.id){
-      const idx=customers.findIndex(x=>String(x.id)===String(record.id));
-      if(idx>=0){
-        if(!matches||matches(record)){customers[idx]={...customers[idx],...record};render();return 'patched'}
-        customers.splice(idx,1);render();refreshCounts?.();return 'removed';
-      }
-      refreshCounts?.();return 'count-only';
-    }
-  }catch(_){}
-  load?.();refreshCounts?.();return 'reload';
+// Compatibility for callers outside the two customer pages. Partial events are invalidations.
+export function smartCustomerSubscription({load}){
+  Promise.resolve().then(()=>load?.()).catch(error=>console.warn('Customer refresh deferred',error));
+  return 'reload';
 }

@@ -22,6 +22,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up Node for customer loading checks
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check customer loading
+        run: |
+          node --check customer-loader.js
+          node --check admin-app.js
+          node --check sales-app.js
+          node --check vip-optimizations.js
+          node --test tests/customer-loading.test.mjs
       - name: Configure Pages
         uses: actions/configure-pages@v5
         with:
