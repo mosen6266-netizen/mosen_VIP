@@ -39,7 +39,8 @@ export async function captureSnapshot(api,{names=ENTITIES,progress=()=>{},retryO
   return {started_at,completed_at:new Date().toISOString(),entities:second};
 }
 export async function makeBackup(snapshot){
-  const payload={app_id:APP_ID,started_at:snapshot.started_at,completed_at:snapshot.completed_at,entities:snapshot.entities,assets:snapshot.assets||[],attachment_policy:snapshot.assets?'embedded':'links-only'};
+  const missing_assets=snapshot.missing_assets||[];
+  const payload={app_id:APP_ID,started_at:snapshot.started_at,completed_at:snapshot.completed_at,entities:snapshot.entities,assets:snapshot.assets||[],missing_assets,attachment_policy:missing_assets.length?'embedded-with-missing':snapshot.assets?'embedded':'links-only'};
   return {format:FORMAT,version:2,exported_at:new Date().toISOString(),payload,counts:counts(payload.entities),checksum_sha256:await digest(canonical(payload))};
 }
 
@@ -80,15 +81,20 @@ export async function parseBackup(raw){
   if(raw?.format===FORMAT&&Number(raw.version)===2){
     if(raw.payload?.app_id!==APP_ID)throw Error('备份不属于当前客户系统');
     if(await digest(canonical(raw.payload))!==raw.checksum_sha256)throw Error('备份完整性校验失败');
-    for(const asset of raw.payload.assets||[]){
+    const assets=raw.payload.assets||[],missing=raw.payload.missing_assets||[],policy=raw.payload.attachment_policy;
+    if(!Array.isArray(assets)||!Array.isArray(missing)||!['embedded','embedded-with-missing','links-only'].includes(policy))throw Error('附件清单格式不正确');
+    for(const asset of assets){
       if(!asset.old_url||typeof asset.content!=='string'||!/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(asset.content)||await digest(asset.content)!==asset.checksum_sha256)throw Error('附件完整性校验失败');
       if(asset.size!=null&&atob(asset.content).length!==Number(asset.size))throw Error('附件长度校验失败');
     }
-    if(raw.payload.attachment_policy==='embedded'){
-      const urls=(raw.payload.assets||[]).map(asset=>asset.old_url),known=new Set(urls);
+    if(policy==='embedded'||policy==='embedded-with-missing'){
+      if(policy==='embedded'&&missing.length)throw Error('完整附件备份不能包含缺失附件');
+      const referenced=new Set(attachmentRefs(raw.payload.entities).map(ref=>ref.old_url));
+      if(missing.some(ref=>!ref||!referenced.has(ref.old_url)||typeof ref.reason!=='string'||!ref.reason.trim()))throw Error('缺失附件清单不正确');
+      const urls=[...assets,...missing].map(asset=>asset.old_url),known=new Set(urls);
       if(known.size!==urls.length||attachmentRefs(raw.payload.entities).some(ref=>!known.has(ref.old_url)))throw Error('备份附件清单不完整或重复');
     }
-    return {entities:validateEntities(raw.payload.entities),assets:raw.payload.assets||[],checksum:raw.checksum_sha256,version:2};
+    return {entities:validateEntities(raw.payload.entities),assets,missing_assets:missing,attachment_policy:policy,checksum:raw.checksum_sha256,version:2};
   }
   const business=raw?.format===FORMAT&&Number(raw.version)===1;
   const full=raw?.format==='MOSEN_VIP_FULL_BACKUP'&&Number(raw.version)===4;

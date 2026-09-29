@@ -128,7 +128,7 @@
       <section id="view-backup" class="admin-view" hidden>
         <div class="card">
           <div class="section-title"><div class="dot"></div><h2>业务数据备份 / 恢复</h2><div class="spacer"></div><span class="pill">只备份客户与业务数据</span></div>
-          <div class="backup-intro">备份从云端完整读取业务员、字段、进度、客户、归档、日志、话术及客户话术进度，并保存话术附件原文件、隔离记录和统计原始记录。数据表或附件读取失败时停止导出。校验通过的备份同时保存在本机恢复保险库。网页代码、GitHub 仓库、工具和模板不在业务恢复范围内。</div>
+          <div class="backup-intro">备份从云端完整读取业务员、字段、进度、客户、归档、日志、话术及客户话术进度，并保存话术附件原文件、隔离记录和统计原始记录。数据表读取失败时停止导出；无法取得的附件保留原链接并单独列明，不影响业务数据备份。校验通过的备份同时保存在本机恢复保险库。网页代码、GitHub 仓库、工具和模板不在业务恢复范围内。</div>
           <div class="backup-actions">
             <button id="exportBackup" class="btn primary">导出业务数据备份</button>
             <button id="importBackup" class="btn soft">从备份安全补回数据</button>
@@ -210,4 +210,4 @@
   </div>
 </div>
 
-<script type="module" src="./admin-app.js?v=20260929-safe-backup1"></script><script src="./vip-tool-catalog.js?v=20260929-catalog-2"></script><script src="./vip-workflow.js?v=20260929-standalone-sync-6"></script></body></html>
+<script type="module" src="./admin-app.js?v=20260929-safe-backup2"></script><script src="./vip-tool-catalog.js?v=20260929-catalog-2"></script><script src="./vip-workflow.js?v=20260929-standalone-sync-6"></script></body></html>

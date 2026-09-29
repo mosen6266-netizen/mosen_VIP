@@ -1,28 +1,47 @@
-import { APP_ID,CORE,ENTITIES,FORMAT,canonical,digest,counts,readTable,captureSnapshot,makeBackup,parseBackup,validateEntities,planRestore,executeRestore,openVault,attachmentRefs } from './backup-safe.js?v=20260929-safe-backup1';
+import { APP_ID,CORE,ENTITIES,FORMAT,canonical,digest,counts,readTable,captureSnapshot,makeBackup,parseBackup,validateEntities,planRestore,executeRestore,openVault,attachmentRefs } from './backup-safe.js?v=20260929-safe-backup2';
 import { retryRead } from './customer-loader.js?v=20260929-stable-load1';
 
 const MAX_BYTES=100*1024*1024;
 function base64(bytes){let s='';for(let i=0;i<bytes.length;i+=0x8000)s+=String.fromCharCode(...bytes.subarray(i,i+0x8000));return btoa(s)}
 function decode(value){return Uint8Array.from(atob(value),c=>c.charCodeAt(0))}
-export async function captureAttachments(entities,progress=()=>{}){
-  const assets=[];let total=0;
+export function resolveAttachmentUrl(value,pageHref=location.href){
+  // Workflow files historically store paths relative to a toolbox subpage.
+  // Keep the original reference as the restore key; only resolve the download URL.
+  let path=String(value);
+  if(/^(?:\.\.\/|\.\/)?data\/chat-flow-assets\//.test(path))path='./toolbox/'+path.replace(/^\.\.\//,'').replace(/^\.\//,'');
+  const url=new URL(path,pageHref);
+  if(!['https:','http:'].includes(url.protocol))throw Error('附件地址不受支持');
+  return url;
+}
+export async function captureAttachments(entities,progress=()=>{},{retryOptions}={}){
+  const assets=[],missing_assets=[];let total=0;
   for(const ref of attachmentRefs(entities)){
-    const url=new URL(ref.old_url,location.href);
-    if(!['https:','http:'].includes(url.protocol))throw Error('附件地址不受支持：'+ref.name);
+    try{
+    const url=resolveAttachmentUrl(ref.old_url);
     progress('正在备份附件：'+ref.name);
     const bytes=await retryRead(async()=>{
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);
       try{
         const response=await fetch(url,{cache:'no-store',signal:controller.signal});
-        if(!response.ok)throw Object.assign(Error('附件读取失败：HTTP '+response.status),{status:response.status});
-        if(Number(response.headers.get('content-length'))>MAX_BYTES)throw Error('附件超过备份容量限制');
-        const result=new Uint8Array(await response.arrayBuffer());if(result.length>MAX_BYTES)throw Error('附件超过备份容量限制');return result;
+        if(!response.ok)throw Object.assign(Error('附件读取失败：HTTP '+response.status),{status:response.status,response:{headers:{'retry-after':response.headers.get('retry-after')}}});
+        // Some hosts return their HTML error page with HTTP 200.
+        if((response.headers.get('content-type')||'').includes('text/html')&&!/\.html?$/i.test(ref.name))throw Object.assign(Error('附件地址返回了网页，未保存为原文件'),{status:422});
+        if(Number(response.headers.get('content-length'))>MAX_BYTES-total)throw Object.assign(Error('附件超过剩余备份容量'),{status:413});
+        const result=new Uint8Array(await response.arrayBuffer());if(result.length>MAX_BYTES-total)throw Object.assign(Error('附件超过剩余备份容量'),{status:413});return result;
       }finally{clearTimeout(timer)}
-    },{timeoutMs:16000});
-    total+=bytes.length;if(total>MAX_BYTES)throw Error('附件总量超过 100 MB，本次未生成不完整备份');
+    },{timeoutMs:16000,...retryOptions});
+    total+=bytes.length;
     const content=base64(bytes);assets.push({...ref,size:bytes.length,content,checksum_sha256:await digest(content)});
+    }catch(error){
+      missing_assets.push({...ref,reason:String(error?.message||'附件暂时无法读取'),http_status:Number(error?.status)||null});
+      progress('附件未取得，已保留链接并记入清单：'+ref.name);
+    }
   }
-  return assets;
+  return {assets,missing_assets};
+}
+function missingAttachments(source){
+  const embedded=new Set((source.assets||[]).map(a=>a.old_url)),declared=new Map((source.missing_assets||[]).map(a=>[a.old_url,a]));
+  return attachmentRefs(source.entities).filter(a=>!embedded.has(a.old_url)).map(a=>declared.get(a.old_url)||{...a,reason:'此备份仅保留附件链接，未嵌入原文件'});
 }
 export async function readBackupFile(file){
   if(file.size>MAX_BYTES*1.5)throw Error('备份文件超过容量限制');
@@ -62,8 +81,8 @@ export function createBackupController({api,show,confirm,refresh,setMaintenance,
   }
   async function capture(){
     const snapshot=await captureSnapshot(api,{progress:text=>show(text,'warn')});
-    snapshot.assets=await captureAttachments(snapshot.entities,text=>show(text,'warn'));
-    if(snapshot.assets.length){
+    Object.assign(snapshot,await captureAttachments(snapshot.entities,text=>show(text,'warn')));
+    if(snapshot.assets.length||snapshot.missing_assets.length){
       const latest={};for(const name of ENTITIES)latest[name]=await readTable(api.entities[name]);
       if(canonical(latest)!==canonical(snapshot.entities))throw Error('下载附件期间业务数据发生变化，本次备份已停止，请重试');
       snapshot.completed_at=new Date().toISOString();
@@ -78,11 +97,13 @@ export function createBackupController({api,show,confirm,refresh,setMaintenance,
   }
   return {
     exportBackup(){return exclusive(async()=>{
-      show('正在完整读取云端数据，任何一张表或附件读取失败都会停止导出。','warn');
+      show('正在完整读取云端数据。数据表读取失败会停止导出；无法取得的附件会保留链接并单独列明。','warn');
       const backup=await capture();
       const vault=await vaultOpen();await preserve(vault,'export:'+backup.checksum_sha256,backup);
-      download(backup,'mosen_VIP-业务数据完整备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json');
-      const n=backup.counts;show('备份已生成：'+n.customers+' 个可见客户（正常 '+n.active+'，归档 '+n.archived+'），'+Object.keys(n.tables).length+' 张数据表，'+backup.payload.assets.length+' 个附件原文件。已校验并保留本机副本。','ok');
+      const missing=backup.payload.missing_assets;
+      download(backup,'mosen_VIP-业务数据备份'+(missing.length?'-附件不完整':'')+'-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json');
+      if(missing.length)download({backup_checksum:backup.checksum_sha256,missing_assets:missing},'mosen_VIP-缺失附件清单.json');
+      const n=backup.counts;show('备份已生成：'+n.customers+' 个可见客户（正常 '+n.active+'，归档 '+n.archived+'），'+Object.keys(n.tables).length+' 张数据表，'+backup.payload.assets.length+' 个附件原文件。已校验并保留本机副本。'+(missing.length?'注意：'+missing.length+' 个附件未取得原文件，已保存原链接和缺失清单；该文件不能还原这些附件的原文件。':''),missing.length?'warn':'ok');
     })},
     importBackup(file){return exclusive(async()=>{
       show('正在校验备份完整性、原始 ID 和客户关联…','warn');
@@ -97,8 +118,8 @@ export function createBackupController({api,show,confirm,refresh,setMaintenance,
       await preserve(vault,prefix+':safety:'+safety.checksum_sha256,safety);
       await preserve(vault,'latest-safety',safety);
       download(safety,'mosen_VIP-恢复前真实数据-'+safety.exported_at.replace(/[:.]/g,'-')+'.json');
-      const n=counts(source.entities),p=plan.summary;
-      const ok=await confirm('备份包含 '+n.customers+' 个可见客户（正常 '+n.active+'，归档 '+n.archived+'）。\n\n计划补回 '+p.create+' 条缺失记录；已存在 '+p.existing+' 条；保留当前内容的冲突 '+p.conflict+' 条；缺失关联而跳过 '+p.unresolved+' 条。\n\n恢复不会清空数据，也不会覆盖已有修改。当前真实数据已保存到本机保险库，并已发起安全备份下载。'+(source.zip?'\nZIP 中的网页代码、GitHub 仓库和工具模板不会覆盖当前系统。':'')+(!source.assets?.length?'\n旧备份没有嵌入附件原文件；原有附件链接将保留。':''),{title:'安全补回业务数据',confirmText:'补回缺失记录'});
+      const n=counts(source.entities),p=plan.summary,sourceMissing=missingAttachments(source),safetyMissing=missingAttachments(safety.payload);
+      const ok=await confirm('备份包含 '+n.customers+' 个可见客户（正常 '+n.active+'，归档 '+n.archived+'）。\n\n计划补回 '+p.create+' 条缺失记录；已存在 '+p.existing+' 条；保留当前内容的冲突 '+p.conflict+' 条；缺失关联而跳过 '+p.unresolved+' 条。\n\n恢复不会清空数据，也不会覆盖已有修改。当前真实数据已保存到本机保险库，并已发起安全备份下载。'+(source.zip?'\nZIP 中的网页代码、GitHub 仓库和工具模板不会覆盖当前系统。':'')+(sourceMissing.length?'\n待恢复备份有 '+sourceMissing.length+' 个附件没有原文件，只能保留原链接，不能重新上传这些文件。':'')+(safetyMissing.length?'\n本次恢复前安全备份有 '+safetyMissing.length+' 个附件未取得原文件，缺失清单已写入安全备份。':''),{title:'安全补回业务数据',confirmText:'补回缺失记录'});
       if(!ok){show('已取消，云端数据未改变。','warn');return}
       setMaintenance(true);
       let journal=await vault.get(prefix+':journal')||{source:source.checksum,state:'running',operations:{},assets:{}};
@@ -118,10 +139,10 @@ export function createBackupController({api,show,confirm,refresh,setMaintenance,
         assetUrls[asset.old_url]=url;journal.assets[asset.old_url]={state:'uploaded',url};await persist(journal);
       }
       const report=await executeRestore(api,source.entities,{journal,persist,assetUrls,progress:text=>show(text,'warn')});
-      download({source_checksum:source.checksum,completed_at:new Date().toISOString(),...report},'mosen_VIP-恢复核对报告.json');
-      const issues=report.conflicts.length+report.unresolved.length;
-      show('安全恢复'+(issues?'已完成可补回部分':'完成')+'：新增并回读验证 '+report.created+' 条；已存在 '+report.existing+' 条；冲突保留 '+report.conflicts.length+' 条；关联缺失跳过 '+report.unresolved.length+' 条。原有数据未删除。'+(issues?'详情已写入恢复核对报告。':''),issues?'warn':'ok');
+      download({source_checksum:source.checksum,completed_at:new Date().toISOString(),...report,missing_source_assets:sourceMissing,missing_safety_assets:safetyMissing},'mosen_VIP-恢复核对报告.json');
+      const issues=report.conflicts.length+report.unresolved.length+sourceMissing.length+safetyMissing.length;
+      show('安全恢复'+(issues?'已完成可补回部分':'完成')+'：新增并回读验证 '+report.created+' 条；已存在 '+report.existing+' 条；冲突保留 '+report.conflicts.length+' 条；关联缺失跳过 '+report.unresolved.length+' 条。原有数据未删除。'+(sourceMissing.length?'待恢复备份缺少 '+sourceMissing.length+' 个附件原文件，已保留原链接。':'')+(safetyMissing.length?'恢复前安全备份缺少 '+safetyMissing.length+' 个附件原文件。':'')+(issues?'详情已写入恢复核对报告。':''),issues?'warn':'ok');
     })},
-    downloadSafety(){return exclusive(async()=>{const vault=await vaultOpen(),saved=await vault.get('latest-safety');if(!saved)throw Error('本机还没有恢复前安全备份');await parseBackup(saved);download(saved,'mosen_VIP-恢复前安全备份.json');show('恢复前安全备份已重新下载。','ok')})}
+    downloadSafety(){return exclusive(async()=>{const vault=await vaultOpen(),saved=await vault.get('latest-safety');if(!saved)throw Error('本机还没有恢复前安全备份');const source=await parseBackup(saved),missing=missingAttachments(source);download(saved,'mosen_VIP-恢复前安全备份.json');show('恢复前安全备份已重新下载。'+(missing.length?'其中 '+missing.length+' 个附件只有原链接，缺少原文件。':''),missing.length?'warn':'ok')})}
   };
 }

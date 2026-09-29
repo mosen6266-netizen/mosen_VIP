@@ -3,6 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import {ENTITIES,CORE,FORMAT,canonical,digest,readTable,captureSnapshot,makeBackup,parseBackup,validateEntities,planRestore,executeRestore,replaceAssetUrls} from '../backup-safe.js';
 const copy=x=>JSON.parse(JSON.stringify(x));
+test('missing attachment manifest is checksummed and requires explicit unique coverage',async()=>{
+ const e=source(),url='../data/chat-flow-assets/missing.png';e.VIPWorkflowDefinition[0].bundle.workflows[0].steps=[{attachments:[{url,name:'missing.png'}]}];
+ const raw=await makeBackup({entities:e,assets:[],missing_assets:[{old_url:url,reason:'HTTP 404'}]});assert.equal((await parseBackup(raw)).missing_assets.length,1);
+ const tampered=copy(raw);tampered.payload.missing_assets[0].reason='changed';await assert.rejects(parseBackup(tampered),/校验/);
+ for(const edit of [p=>p.missing_assets=[],p=>p.missing_assets.push(copy(p.missing_assets[0])),p=>p.missing_assets[0].reason='',p=>p.attachment_policy='embedded',p=>p.attachment_policy='unknown']){
+  const invalid=copy(raw);edit(invalid.payload);invalid.checksum_sha256=await digest(canonical(invalid.payload));await assert.rejects(parseBackup(invalid),/附件/);
+ }
+});
 const fast={attempts:2,timeoutMs:20,wait:async()=>{}};
 function source(){
  const e=Object.fromEntries(ENTITIES.map(n=>[n,[]]));

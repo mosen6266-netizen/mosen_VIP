@@ -1,4 +1,4 @@
-import { createBackupController } from './backup-ui.js?v=20260929-safe-backup1';
+import { createBackupController } from './backup-ui.js?v=20260929-safe-backup2';
 import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, downloadCsv, uiAlert, uiConfirm, uiPrompt, localDateKey, buildCustomerSearchText, readDashboardStat, adjustDashboardStat, createEntityBatch } from './base44.js';
 import { customerSearchFields, initGlobalSearch } from './vip-optimizations.js?v=20260929-stable-load1';
 import { createCustomerStore, customerPage as selectCustomerPage, customerNotice, subscribeCustomerRefresh, retryRead, recordRows } from './customer-loader.js?v=20260929-stable-load1';
