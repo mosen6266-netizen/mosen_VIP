@@ -2,7 +2,7 @@
   "format": "MOSEN_VIP_BASE44_SCHEMA_BLUEPRINT",
   "version": 3,
   "app_id": "6abb8b9e7bc76cdfe0aeb883",
-  "generated_at": "2026-09-29T15:21:21.124Z",
+  "generated_at": "2026-09-29T18:38:11.515Z",
   "entities": [
     {
       "entity_name": "Client",
@@ -529,6 +529,16 @@
           },
           "legacy_source_id": {
             "type": "string"
+          },
+          "duplicate_record": {
+            "type": "boolean",
+            "default": false
+          },
+          "duplicate_reason": {
+            "type": "string"
+          },
+          "duplicate_of_legacy_source_id": {
+            "type": "string"
           }
         },
         "required": [],
@@ -933,6 +943,34 @@
           "update": {},
           "delete": {}
         }
+      }
+    },
+    {
+      "entity_name": "VIPBusinessBackupSnapshot",
+      "entity_schema": {
+        "name": "VIPBusinessBackupSnapshot",
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "object"
+          },
+          "checksum_sha256": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          },
+          "version": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "payload"
+        ]
       }
     },
     {
