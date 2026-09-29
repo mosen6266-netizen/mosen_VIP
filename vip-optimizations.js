@@ -45,14 +45,17 @@ export async function ensureCustomerIndex(base44, query={}, maxRows=800){
   }
   return {seen,updated};
 }
-async function upsertStat(base44,key,payload){
+async function upsertStat(base44,key,payload,scanStartedAt=''){
   const rows=await base44.entities.VIPDashboardStats.filter({key},'-updated_date',1,0);
   const row=(Array.isArray(rows)?rows:(rows?.items||[]))[0];
+  if(row&&scanStartedAt&&String(row.updated_at||row.updated_date||'')>scanStartedAt)return {skipped:true,row};
   const next={key,...payload,updated_at:new Date().toISOString(),version:Number(row?.version||0)+1};
   if(row) await base44.entities.VIPDashboardStats.update(row.id,next);
   else await base44.entities.VIPDashboardStats.create(next);
+  return {skipped:false,next};
 }
 export async function reconcileDashboardStats(base44){
+  const scanStartedAt=new Date().toISOString();
   const counts=new Map();let active=0,archived=0,today=0,skip=0;
   const d=new Date(),todayKey=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');
   while(true){
@@ -66,8 +69,8 @@ export async function reconcileDashboardStats(base44){
     }
     if(rows.length<500)break;skip+=rows.length;if(skip>100000)break;
   }
-  await upsertStat(base44,'global',{scope:'global',rep_username:'',active_customers:active,archived_customers:archived,today_active_customers:today});
-  for(const [rep,x] of counts) await upsertStat(base44,'rep:'+rep,{scope:'rep',rep_username:rep,active_customers:x.active,archived_customers:x.archived,today_active_customers:x.today});
+  await upsertStat(base44,'global',{scope:'global',rep_username:'',active_customers:active,archived_customers:archived,today_active_customers:today},scanStartedAt);
+  for(const [rep,x] of counts) await upsertStat(base44,'rep:'+rep,{scope:'rep',rep_username:rep,active_customers:x.active,archived_customers:x.archived,today_active_customers:x.today},scanStartedAt);
   return {active,archived,today,reps:counts.size};
 }
 export async function archiveOldLogs(base44,{days=90,limit=1000}={}){
