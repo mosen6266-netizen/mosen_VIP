@@ -167,21 +167,50 @@
     }
   }
 
+  function flowCloudKey(customerId,flowId){
+    return String(customerId)+'::'+String(flowId);
+  }
+
   async function loadCloudProgress(customerId){
     var local=loadProgress(customerId);
+    var key=String(customerId);
     try{
       var base44=await getBase44();
-      var result=await base44.entities.VIPWorkflowProgress.filter({customer_id:String(customerId)},'-updated_date',1,0);
+      var result=await base44.entities.VIPWorkflowFlowProgress.filter({customer_id:key},'-updated_date',500,0);
       var rows=Array.isArray(result)?result:(result&&result.items)||[];
-      var row=rows[0];
-      if(!row)return local;
-      cloudRows[String(customerId)]=row.id;
-      var cloud={
-        activeFlowId:row.active_flow_id||local.activeFlowId||'',
-        hideDone:row.hide_done===true,
-        flows:row.flows&&typeof row.flows==='object'?row.flows:(local.flows||{}),
-        updatedAt:Date.parse(row.updated_date||'')||Date.now()
-      };
+      if(!rows.length){
+        // One-way compatibility fallback for older V1 progress records.
+        try{
+          var legacyResult=await base44.entities.VIPWorkflowProgress.filter({customer_id:key},'-updated_date',1,0);
+          var legacyRows=Array.isArray(legacyResult)?legacyResult:(legacyResult&&legacyResult.items)||[];
+          var legacy=legacyRows[0];
+          if(legacy&&legacy.flows&&typeof legacy.flows==='object'){
+            local.flows=legacy.flows;
+            local.activeFlowId=legacy.active_flow_id||local.activeFlowId||'';
+            local.hideDone=legacy.hide_done===true;
+          }
+        }catch(_){}
+        return local;
+      }
+      var cloud={activeFlowId:local.activeFlowId||'',hideDone:local.hideDone===true,flows:{}};
+      rows.forEach(function(row){
+        var flowId=String(row.flow_id||'');
+        if(!flowId)return;
+        var completed=Array.isArray(row.completed_step_ids)?row.completed_step_ids.map(String):[];
+        cloud.flows[flowId]={completed:completed,updatedAt:Date.parse(row.updated_at||row.updated_date||'')||Date.now()};
+        cloudRows[flowCloudKey(key,flowId)]={
+          id:row.id,
+          version:Number(row.version||1),
+          completed:completed.slice(),
+          updatedAt:row.updated_at||row.updated_date||''
+        };
+        if(row.is_active===true&&!cloud.activeFlowId)cloud.activeFlowId=flowId;
+        if(row.hide_done===true)cloud.hideDone=true;
+      });
+      // Preserve local flow entries that do not yet exist in cloud.
+      Object.keys(local.flows||{}).forEach(function(flowId){
+        if(!cloud.flows[flowId])cloud.flows[flowId]=local.flows[flowId];
+      });
       try{localStorage.setItem(keyFor(customerId),JSON.stringify(cloud))}catch(_){}
       return cloud;
     }catch(e){
@@ -189,43 +218,71 @@
     }
   }
 
-  function queueCloudSave(customerId,data){
-    var key=String(customerId);
+  function queueCloudSave(customerId,data,flowId){
+    var customerKey=String(customerId);
+    var selectedFlow=String(flowId||data.activeFlowId||'');
+    if(!selectedFlow)return;
+    var key=flowCloudKey(customerKey,selectedFlow);
     clearTimeout(cloudSaveTimers[key]);
     cloudSaveTimers[key]=setTimeout(async function(){
       try{
         var base44=await getBase44();
+        var localFlow=data.flows&&data.flows[selectedFlow]||{};
+        var desired=new Set(Array.isArray(localFlow.completed)?localFlow.completed.map(String):[]);
+        var cached=cloudRows[key]||null;
+
+        var found=await base44.entities.VIPWorkflowFlowProgress.filter({unique_key:key},'-updated_date',2,0);
+        var rows=Array.isArray(found)?found:(found&&found.items)||[];
+        var remote=rows[0]||null;
+        var rowId=remote&&remote.id||cached&&cached.id||'';
+        var remoteVersion=Number(remote&&remote.version||cached&&cached.version||0);
+        var remoteCompleted=new Set(Array.isArray(remote&&remote.completed_step_ids)?remote.completed_step_ids.map(String):(cached&&cached.completed||[]));
+        var merged=new Set(remoteCompleted);
+
+        if(cached){
+          var baseSet=new Set((cached.completed||[]).map(String));
+          desired.forEach(function(id){if(!baseSet.has(id))merged.add(id)});
+          baseSet.forEach(function(id){if(!desired.has(id))merged.delete(id)});
+        }else{
+          merged=desired;
+        }
+
         var payload={
-          customer_id:key,
-          customer_name:currentCustomer&&String(currentCustomer.id)===key?currentCustomer.name:'',
-          active_flow_id:data.activeFlowId||'',
+          unique_key:key,
+          customer_id:customerKey,
+          customer_name:currentCustomer&&String(currentCustomer.id)===customerKey?currentCustomer.name:'',
+          flow_id:selectedFlow,
+          completed_step_ids:Array.from(merged),
           hide_done:data.hideDone===true,
-          flows:data.flows||{},
-          updated_by:(localStorage.getItem('mVIP_rep_username')||'admin')
+          is_active:String(data.activeFlowId||'')===selectedFlow,
+          version:remoteVersion+1,
+          updated_by:(localStorage.getItem('mVIP_rep_username')||'admin'),
+          updated_at:new Date().toISOString(),
+          migrated_from_legacy:false
         };
-        var rowId=cloudRows[key];
-        if(!rowId){
-          var found=await base44.entities.VIPWorkflowProgress.filter({customer_id:key},'-updated_date',1,0);
-          var rows=Array.isArray(found)?found:(found&&found.items)||[];
-          if(rows[0]){rowId=rows[0].id;cloudRows[key]=rowId}
+
+        if(rowId){
+          await base44.entities.VIPWorkflowFlowProgress.update(rowId,payload);
+        }else{
+          var created=await base44.entities.VIPWorkflowFlowProgress.create(payload);
+          rowId=created&&created.id||'';
         }
-        if(rowId)await base44.entities.VIPWorkflowProgress.update(rowId,payload);
-        else{
-          var created=await base44.entities.VIPWorkflowProgress.create(payload);
-          if(created&&created.id)cloudRows[key]=created.id;
-        }
+
+        cloudRows[key]={id:rowId,version:payload.version,completed:payload.completed_step_ids.slice(),updatedAt:payload.updated_at};
+        data.flows[selectedFlow]={completed:payload.completed_step_ids.slice(),updatedAt:Date.now()};
+        try{localStorage.setItem(keyFor(customerId),JSON.stringify(data))}catch(_){}
       }catch(e){}
     },350);
   }
 
-  function saveProgress(customerId,data){
+  function saveProgress(customerId,data,flowId){
     data.updatedAt=Date.now();
     try{
       localStorage.setItem(keyFor(customerId),JSON.stringify(data));
     }catch(e){
       toast('本地保存空间不足');
     }
-    queueCloudSave(customerId,data);
+    queueCloudSave(customerId,data,flowId||data.activeFlowId||'');
   }
 
   function getCompletedSet(data,flowId){
