@@ -251,9 +251,42 @@
     }, true);
   }
 
+  function renderUnifiedCatalog(catalog){
+    const groups=catalog&&catalog.groups||{};
+    document.querySelectorAll('[data-grid]').forEach(grid=>{grid.innerHTML=''});
+    ['us','de','other'].forEach(cat=>{
+      const grid=document.querySelector('[data-grid="'+cat+'"]');
+      if(!grid)return;
+      (groups[cat]||[]).forEach(item=>{
+        const card=createCard(item);
+        grid.appendChild(card);
+      });
+    });
+    refreshCategoryUI();
+    refreshCounts();
+    const search=document.getElementById('search');
+    if(search)search.dispatchEvent(new Event('input',{bubbles:true}));
+  }
+
   async function init(){
     ensureStyle();
     enableCrossCategoryDrag();
+
+    if(window.VIPToolCatalog){
+      try{
+        const catalog=await window.VIPToolCatalog.load(false);
+        renderUnifiedCatalog(catalog);
+        window.VIPToolCatalog.subscribe(next=>{
+          const note=document.getElementById('sortNote');
+          if(note&&note.classList.contains('unsaved'))return;
+          renderUnifiedCatalog(next);
+        });
+        return;
+      }catch(err){
+        console.warn('统一工具目录读取失败，使用兼容目录：',err);
+      }
+    }
+
     let data = {tools:[]};
     try{ data = await fetchJson(INDEX_URL); }catch(err){ console.warn('无法读取动态工具目录：', err); }
     document.querySelectorAll('.card[data-id]').forEach(card => {
@@ -267,7 +300,7 @@
     tools.forEach(item => {
       if(!item || !item.id || !item.path || existing.has(item.id)) return;
       const cat = categoryFor(item);
-      const grid = document.querySelector(`[data-grid="${cat}"]`) || document.querySelector('[data-grid="other"]');
+      const grid = document.querySelector('[data-grid="'+cat+'"]') || document.querySelector('[data-grid="other"]');
       if(!grid) return;
       const card = createCard(item);
       grid.appendChild(card);
