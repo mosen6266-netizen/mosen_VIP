@@ -125,6 +125,7 @@
     .select-menu,.context-menu{max-width:calc(100vw - 16px)}
   }
 </style>
+<script src="/mosen_VIP/vip-dialogs.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -682,7 +683,7 @@ function saveBalanceEdit(){
   if(!currentRecord) return;
   const raw=$('balanceInput').value.trim();
   const n=parseLocaleNumber(raw);
-  if(!Number.isFinite(n)||n<0){alert('Bitte geben Sie ein gültiges, nicht negatives Guthaben ein.');return}
+  if(!Number.isFinite(n)||n<0){vipAlert('Bitte geben Sie ein gültiges, nicht negatives Guthaben ein.');return}
   ensureBalances(currentRecord);
   currentRecord.balances[editingBalanceSymbol]=editingBalanceSymbol==='ETH'?n.toFixed(6):n.toFixed(2);
   if(currentRecord.asset===editingBalanceSymbol) currentRecord.balance=currentRecord.balances[editingBalanceSymbol];
@@ -710,10 +711,10 @@ function editTxFee(ev,index){
 function saveTxFeeEdit(){
   if(!currentRecord||editingFeeTxIndex<0||!currentRecord.transactions?.[editingFeeTxIndex]) return;
   const raw=$('feeInput').value.trim().replace(/\s*ETH\s*$/i,'').trim();
-  if(!/^\d[\d.,]*$/.test(raw)){alert('Bitte geben Sie eine gültige ETH-Netzwerkgebühr ein.');return}
+  if(!/^\d[\d.,]*$/.test(raw)){vipAlert('Bitte geben Sie eine gültige ETH-Netzwerkgebühr ein.');return}
   const normalized=canonicalOrderNumber(raw);
   const n=Number(normalized);
-  if(!normalized||!Number.isFinite(n)||n<0){alert('Bitte geben Sie eine gültige ETH-Netzwerkgebühr ein.');return}
+  if(!normalized||!Number.isFinite(n)||n<0){vipAlert('Bitte geben Sie eine gültige ETH-Netzwerkgebühr ein.');return}
   if(!ensureCurrentEditable()) return;
   currentRecord.transactions[editingFeeTxIndex].fee=normalized+' ETH';
   db[norm(currentRecord.address)]=currentRecord;
@@ -900,7 +901,7 @@ function saveTxRow(){
   const feeMatch=feeRaw.match(/^([+-]?[\d.,]+)\s*([A-Za-z0-9]+)?$/);
   const feeCanonical=feeMatch&&Number.isFinite(parseLocaleNumber(feeMatch[1]))?`${parseLocaleNumber(feeMatch[1]).toFixed((feeMatch[2]||'ETH').toUpperCase()==='ETH'?6:2)} ${(feeMatch[2]||'ETH').toUpperCase()}`:feeRaw;
   const tx={time:normalizeDateText($('txTime').value.trim()),direction:dir,asset,amount:Number.isFinite(amountNum)?amountNum.toFixed(asset==='ETH'?6:2):$('txAmount').value.trim(),counterparty:isJudicialDirection(dir)?'':$('txCounterparty').value.trim(),status:internalText($('txStatus').value.trim()),hash:$('txHash').value.trim()||currentRecord.address,block:$('txBlock').value.trim(),fee:feeCanonical};
-  if(!tx.time||!tx.amount){alert('Datum/Uhrzeit und Betrag sind erforderlich.');return}
+  if(!tx.time||!tx.amount){vipAlert('Datum/Uhrzeit und Betrag sind erforderlich.');return}
   if(!Array.isArray(currentRecord.transactions))currentRecord.transactions=[];
   if(txEditMode==='add') currentRecord.transactions.push(tx); else if(selectedTxIndex>=0) currentRecord.transactions[selectedTxIndex]=tx;
   currentRecord.chain='Ethereum';
@@ -1005,8 +1006,8 @@ function clearForm(){
   $('fStatus').value='Under Review';$('fRisk').value='Low';
 }
 function saveRecord(){
-  const address=$('fAddress').value.trim();if(!address){alert('Eine Wallet-Adresse ist erforderlich.');return}
-  let tx=[];try{tx=$('fTx').value.trim()?JSON.parse($('fTx').value):[];if(!Array.isArray(tx))throw 0}catch(e){alert('Die Transaktionsdatensätze müssen ein gültiges JSON-Array sein.');return}
+  const address=$('fAddress').value.trim();if(!address){vipAlert('Eine Wallet-Adresse ist erforderlich.');return}
+  let tx=[];try{tx=$('fTx').value.trim()?JSON.parse($('fTx').value):[];if(!Array.isArray(tx))throw 0}catch(e){vipAlert('Die Transaktionsdatensätze müssen ein gültiges JSON-Array sein.');return}
   const asset=$('fAsset').value.trim()||'USDT';
   const bal=parseLocaleNumber($('fBalance').value.trim());
   const tin=parseLocaleNumber($('fIn').value.trim());
@@ -1017,9 +1018,9 @@ function saveRecord(){
   recomputeDerived(r);
   db[norm(address)]=r;saveDB();$('addressInput').value=address;manager.close();queryAddress();
 }
-function deleteRecord(){
-  const address=$('fAddress').value.trim();if(!address||!db[norm(address)]){alert('Diese Adresse ist nicht in der internen Adressdatenbank enthalten.');return}
-  if(!confirm('Diesen Adressdatensatz aus der internen Adressdatenbank löschen?')) return;
+async function deleteRecord(){
+  const address=$('fAddress').value.trim();if(!address||!db[norm(address)]){vipAlert('Diese Adresse ist nicht in der internen Adressdatenbank enthalten.');return}
+  if(!await vipConfirm('Diesen Adressdatensatz aus der internen Adressdatenbank löschen?',{title:'Adressdatensatz löschen',confirmText:'Löschen',danger:true})) return;
   delete db[norm(address)];saveDB();clearForm();manager.close();$('result').style.display='none';setMessage('Der Adressdatensatz wurde aus der internen Adressdatenbank gelöscht.','ok');
 }
 function copyAddress(){if(currentRecord) navigator.clipboard.writeText(currentRecord.address)}
@@ -1396,13 +1397,13 @@ function buildReportHtml(record){
 </html>`;
 }
 function generateReport(){
-  if(!currentRecord){alert('Bitte suchen Sie zuerst nach einer Adresse.');return}
+  if(!currentRecord){vipAlert('Bitte suchen Sie zuerst nach einer Adresse.');return}
   const record=JSON.parse(JSON.stringify(currentRecord));
   ensureBalances(record);
   recomputeDerived(record);
   record.note=OFFICIAL_KYC_NOTE;
   const popup=window.open('','_blank');
-  if(!popup){alert('Das Berichtsfenster konnte nicht geöffnet werden. Bitte erlauben Sie Pop-ups und versuchen Sie es erneut.');return}
+  if(!popup){vipAlert('Das Berichtsfenster konnte nicht geöffnet werden. Bitte erlauben Sie Pop-ups und versuchen Sie es erneut.');return}
   popup.document.open();
   popup.document.write(buildReportHtml(record));
   popup.document.close();
@@ -1412,7 +1413,7 @@ function generateReport(){
 }
 
 function importDB(ev){
-  const f=ev.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw 0;db=translateLegacyDeep(obj);saveDB();setMessage(`Datenbankimport abgeschlossen. ${Object.keys(db).length} ${Object.keys(db).length===1?'Adressdatensatz':'Adressdatensätze'} geladen.`,'ok')}catch(e){alert('Import fehlgeschlagen: Das JSON-Datenbankformat ist ungültig.')}};reader.readAsText(f);ev.target.value='';
+  const f=ev.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{try{const obj=JSON.parse(reader.result);if(!obj||Array.isArray(obj)||typeof obj!=='object')throw 0;db=translateLegacyDeep(obj);saveDB();setMessage(`Datenbankimport abgeschlossen. ${Object.keys(db).length} ${Object.keys(db).length===1?'Adressdatensatz':'Adressdatensätze'} geladen.`,'ok')}catch(e){vipAlert('Import fehlgeschlagen: Das JSON-Datenbankformat ist ungültig.')}};reader.readAsText(f);ev.target.value='';
 }
 updateCount();
 </script>
