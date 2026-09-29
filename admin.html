@@ -659,7 +659,7 @@ const FULL_BACKUP_VERSION=4;
 const VIP_REPO_OWNER='mosen6266-netizen';
 const VIP_REPO_NAME='mosen_VIP';
 const VIP_REPO_BRANCH='main';
-const BACKUP_ENTITY_NAMES=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPActivityLog','VIPWorkflowDefinition','VIPWorkflowProgress','VIPWorkflowFlowProgress','VIPToolCatalog','VIPDashboardStats'];
+const BACKUP_ENTITY_NAMES=['VIPSalesRep','VIPFormField','VIPProgressStage','VIPCustomer','VIPActivityLog','VIPWorkflowDefinition','VIPWorkflowProgress','VIPWorkflowFlowProgress','VIPToolCatalog','VIPDashboardStats','VIPSystemStats'];
 
 async function getAllEntityRecords(entityName){
   const all=[];let skip=0;
@@ -692,7 +692,8 @@ async function collectBackupEntities(){
     VIPWorkflowProgress:rows[6].map(backupRow),
     VIPWorkflowFlowProgress:rows[7].map(backupRow),
     VIPToolCatalog:rows[8].map(backupRow),
-    VIPDashboardStats:rows[9].map(backupRow)
+    VIPDashboardStats:rows[9].map(backupRow),
+    VIPSystemStats:rows[10].map(backupRow)
   };
 }
 
@@ -708,6 +709,7 @@ function backupCounts(entities,repository){
     workflow_flow_progress:(entities.VIPWorkflowFlowProgress||[]).length,
     tool_catalog:(entities.VIPToolCatalog||[]).length,
     dashboard_stats:(entities.VIPDashboardStats||[]).length,
+    system_stats:(entities.VIPSystemStats||[]).length,
     toolbox_files:(repository?.toolbox_files||[]).length
   };
 }
@@ -995,17 +997,17 @@ async function restoreToolboxSnapshot(repository,token,note){
   const backupPaths=new Set(files.map(x=>x.path));
 
   let done=0;
-  const entries=[];
-  for(const file of files){
-    const blob=await githubWrite('/git/blobs',token,{
+  const uploaded=await mapLimit(files,5,async file=>{
+    const blob=await retryAsync(()=>githubWrite('/git/blobs',token,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({content:file.content,encoding:'base64'})
-    });
-    entries.push({path:file.path,mode:file.mode||'100644',type:'blob',sha:blob.sha});
+    }),4);
     done++;
-    if(note&&done%8===0)showMessage(note,'正在恢复工具中心文件 '+done+' / '+files.length+'…','warn');
-  }
+    if(note&&(done%5===0||done===files.length))showMessage(note,'正在恢复工具中心文件 '+done+' / '+files.length+'…','warn');
+    return {path:file.path,mode:file.mode||'100644',type:'blob',sha:blob.sha};
+  });
+  const entries=[...uploaded];
   currentToolbox.filter(p=>!backupPaths.has(p)).forEach(path=>entries.push({path,mode:'100644',type:'blob',sha:null}));
 
   const tree=await githubWrite('/git/trees',token,{
@@ -1031,6 +1033,7 @@ async function restoreToolboxSnapshot(repository,token,note){
 
 async function importFullBackup(file){
   const note=document.getElementById('backupNote');
+  window.MVIP_MAINTENANCE=true;
   try{
     showMessage(note,'正在检查备份文件完整性…','warn');
     const raw=JSON.parse(await file.text());
@@ -1065,7 +1068,7 @@ async function importFullBackup(file){
     downloadBackupObject(safety,'mosen_VIP-恢复前安全备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json');
 
     showMessage(note,'正在清理并恢复全部云端数据，请不要关闭页面…','warn');
-    for(const name of ['VIPActivityLog','VIPWorkflowFlowProgress','VIPWorkflowProgress','VIPToolCatalog','VIPDashboardStats','VIPWorkflowDefinition','VIPCustomer','VIPProgressStage','VIPFormField','VIPSalesRep']){
+    for(const name of ['VIPActivityLog','VIPWorkflowFlowProgress','VIPWorkflowProgress','VIPToolCatalog','VIPDashboardStats','VIPSystemStats','VIPWorkflowDefinition','VIPCustomer','VIPProgressStage','VIPFormField','VIPSalesRep']){
       await wipeEntity(name);
     }
     await restoreEntities(entities);
@@ -1083,6 +1086,8 @@ async function importFullBackup(file){
     );
   }catch(err){
     showMessage(note,'恢复未完成：'+(err?.message||String(err))+'。如已进入恢复阶段，请使用刚刚自动下载的“恢复前安全备份”再次恢复。','err');
+  }finally{
+    window.MVIP_MAINTENANCE=false;
   }
 }
 
