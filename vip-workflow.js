@@ -13,7 +13,7 @@
   var toolCatalog=null;
 
   function getBase44(){
-    if(!base44Promise)base44Promise=import('./base44.js').then(function(m){return m.base44});
+    if(!base44Promise)base44Promise=import('./base44.js?v=20260929-standalone-34').then(function(m){return m.base44});
     return base44Promise;
   }
 
