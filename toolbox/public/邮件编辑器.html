@@ -155,6 +155,7 @@
   }
 
 </style>
+<script src="/mosen_VIP/vip-dialogs.js"></script>
 </head>
 <body>
 <div class="appbar" id="appbar">
@@ -919,7 +920,7 @@ function openThemeColorPicker(){
 
 async function pickScreenColor(){
   if(!window.EyeDropper){
-    alert('当前浏览器不支持采色笔。请用新版 Chrome 或 Edge 打开这个 HTML，或者直接使用旁边的色板选择颜色。');
+    vipAlert('当前浏览器不支持采色笔。请用新版 Chrome 或 Edge 打开这个 HTML，或者直接使用旁边的色板选择颜色。');
     return;
   }
   try{
@@ -1073,7 +1074,7 @@ function uploadTopLogo(input){
   const file = input && input.files && input.files[0];
   if(!file) return;
   if(!file.type || !file.type.startsWith('image/')){
-    alert('请选择图片文件，例如 PNG、JPG、WEBP。');
+    vipAlert('请选择图片文件，例如 PNG、JPG、WEBP。');
     input.value = '';
     return;
   }
@@ -1081,7 +1082,7 @@ function uploadTopLogo(input){
   reader.onload = function(e){
     const img = getTopLogoImg();
     if(!img){
-      alert('没有找到顶部 Logo 位置。');
+      vipAlert('没有找到顶部 Logo 位置。');
       return;
     }
     img.src = e.target.result;
@@ -1198,7 +1199,7 @@ function getTargetEditableForStatus(){
 
 function openStatusPicker(){
   const editable = getTargetEditableForStatus();
-  if(!editable) return alert('请先点击邮件里要插入状态的文字位置。');
+  if(!editable) return vipAlert('请先点击邮件里要插入状态的文字位置。');
   lastEditable = editable;
   const modal = document.getElementById('statusModal');
   if(modal) modal.classList.add('show');
@@ -1229,7 +1230,7 @@ function insertCustomStatus(){
 
 function insertStatusBadge(icon, text, color){
   const editable = getTargetEditableForStatus();
-  if(!editable) return alert('请先点击邮件里要插入状态的文字位置。');
+  if(!editable) return vipAlert('请先点击邮件里要插入状态的文字位置。');
   const c = normalizeHex(color || themeColor || '#0D2B6A');
   const bg = mix(c, '#FFFFFF', 0.90);
   const border = mix(c, '#FFFFFF', 0.62);
@@ -1647,8 +1648,8 @@ function getSelectedImage(){
 }
 
 function openContentImageUpload(){
-  if(!selectedBlock) return alert('请先选中图片板块');
-  if(!getSelectedImage()) return alert('选中的板块里没有图片。请先添加图片板块或选中已有图片板块。');
+  if(!selectedBlock) return vipAlert('请先选中图片板块');
+  if(!getSelectedImage()) return vipAlert('选中的板块里没有图片。请先添加图片板块或选中已有图片板块。');
   const input = document.getElementById('contentImageUpload');
   if(input) input.click();
 }
@@ -1657,13 +1658,13 @@ function uploadContentImage(input){
   const file = input && input.files && input.files[0];
   if(!file) return;
   if(!file.type || !file.type.startsWith('image/')){
-    alert('请选择图片文件，例如 PNG、JPG、WEBP。');
+    vipAlert('请选择图片文件，例如 PNG、JPG、WEBP。');
     input.value = '';
     return;
   }
   const img = getSelectedImage();
   if(!img){
-    alert('请先选中一个图片板块。');
+    vipAlert('请先选中一个图片板块。');
     input.value = '';
     return;
   }
@@ -1684,7 +1685,7 @@ function uploadContentImage(input){
 
 function setSelectedImageWidth(value){
   const img = getSelectedImage();
-  if(!img) return alert('请先选中图片板块');
+  if(!img) return vipAlert('请先选中图片板块');
   img.style.width = value;
   img.setAttribute('width', value);
   img.style.maxWidth = '100%';
@@ -1693,13 +1694,13 @@ function setSelectedImageWidth(value){
 
 function setSelectedImageRadius(value){
   const img = getSelectedImage();
-  if(!img) return alert('请先选中图片板块');
+  if(!img) return vipAlert('请先选中图片板块');
   img.style.borderRadius = value;
 }
 
 function setSelectedImageAlign(value){
   const img = getSelectedImage();
-  if(!img) return alert('请先选中图片板块');
+  if(!img) return vipAlert('请先选中图片板块');
   const cell = img.closest('td');
   if(cell){
     cell.setAttribute('align', value);
@@ -1710,7 +1711,7 @@ function setSelectedImageAlign(value){
 }
 
 function setWidth(value){
-  if(!selectedBlock) return alert('请先点击选中一个板块');
+  if(!selectedBlock) return vipAlert('请先点击选中一个板块');
   selectedBlock.style.width = value;
   selectedBlock.setAttribute('width', value);
   selectedBlock.style.margin = '0 auto';
@@ -1753,7 +1754,7 @@ function applyBlockHeight(px){
 }
 
 function setHeight(value){
-  if(!selectedBlock) return alert('请先点击选中一个板块');
+  if(!selectedBlock) return vipAlert('请先点击选中一个板块');
   if(value === '' || value === null) return;
   const num = Number(value);
   if(!Number.isFinite(num) || num <= 0) return;
@@ -1761,13 +1762,13 @@ function setHeight(value){
 }
 
 function bumpHeight(amount){
-  if(!selectedBlock) return alert('请先点击选中一个板块');
+  if(!selectedBlock) return vipAlert('请先点击选中一个板块');
   const current = getBlockHeight(selectedBlock) || Math.round(selectedBlock.getBoundingClientRect().height);
   applyBlockHeight(current + amount);
 }
 
 function setAutoHeight(){
-  if(!selectedBlock) return alert('请先点击选中一个板块');
+  if(!selectedBlock) return vipAlert('请先点击选中一个板块');
   selectedBlock.style.height = '';
   selectedBlock.removeAttribute('height');
   selectedBlock.removeAttribute('data-custom-height');
@@ -1957,7 +1958,7 @@ function stopImageResize(){
 }
 
 function setPadding(value){
-  if(!selectedBlock) return alert('请先点击选中一个板块');
+  if(!selectedBlock) return vipAlert('请先点击选中一个板块');
   const pads = selectedBlock.querySelectorAll('[data-edit-padding="true"]');
   if(pads.length){ pads.forEach(td=>td.style.padding = value); }
   else {
@@ -2025,7 +2026,7 @@ function getCurrentEditable(){
 function setFontSize(value){
   value = normalizeFontValue(value);
   if(!value) return;
-  if(!selectedBlock) return alert('请先点击选中一个板块');
+  if(!selectedBlock) return vipAlert('请先点击选中一个板块');
   const editable = getCurrentEditable();
   if(editable){
     applyFontToElement(editable, value);
@@ -2082,7 +2083,7 @@ function applySelectedTextColor(color){
     lastEditable = editable;
     saveCurrentTextRange();
   }else if(!applyColorToEditableOrBlock(chosen)){
-    alert('请先选中文字，或先点击选中一个文字板块');
+    vipAlert('请先选中文字，或先点击选中一个文字板块');
     return;
   }
   scheduleHistorySnapshot();
@@ -2095,27 +2096,27 @@ function formatText(type){
   scheduleHistorySnapshot();
 }
 
-function editSelectedLink(){
+async function editSelectedLink(){
   const block = selectedBlock;
-  if(!block) return alert('请先点击选中按钮板块');
+  if(!block) return vipAlert('请先点击选中按钮板块');
   const links = Array.from(block.querySelectorAll('a'));
-  if(!links.length) return alert('选中的板块里没有按钮链接');
+  if(!links.length) return vipAlert('选中的板块里没有按钮链接');
   let link = links[0];
   if(links.length > 1){
     const options = links.map((a, i) => `${i + 1}=${(a.textContent || '按钮').trim()}`).join('，');
-    const input = prompt('这个板块有多个按钮，请输入要修改第几个链接：' + options, '1');
+    const input = await vipPrompt('这个板块有多个按钮，请输入要修改第几个链接：' + options,{title:'选择按钮链接',value:'1',inputType:'number',confirmText:'下一步'});
     if(input === null) return;
     const n = parseInt(String(input).replace(/[^0-9]/g, ''), 10);
-    if(!Number.isFinite(n) || n < 1 || n > links.length) return alert('请输入 1 到 ' + links.length + ' 之间的数字');
+    if(!Number.isFinite(n) || n < 1 || n > links.length) return vipAlert('请输入 1 到 ' + links.length + ' 之间的数字');
     link = links[n - 1];
   }
-  const url = prompt('请输入按钮跳转链接：', link.getAttribute('href') || 'https://');
+  const url = await vipPrompt('请输入按钮跳转链接：',{title:'编辑按钮链接',value:link.getAttribute('href') || 'https://',placeholder:'https://',confirmText:'保存'});
   if(url) link.setAttribute('href', url);
 }
 
 function moveBlock(direction){
   const row = getRow(selectedBlock);
-  if(!row || row.id === 'footerRow') return alert('请先选中要移动的板块');
+  if(!row || row.id === 'footerRow') return vipAlert('请先选中要移动的板块');
   const parent = row.parentNode;
   if(direction < 0){
     let prev = row.previousElementSibling;
@@ -2129,11 +2130,11 @@ function moveBlock(direction){
   }
 }
 
-function deleteBlock(){
+async function deleteBlock(){
   const row = getRow(selectedBlock);
-  if(!row) return alert('请先选中一个板块');
-  if(row.id === 'footerRow') return alert('底部版权板块建议保留；需要删除可以直接清空文字。');
-  if(confirm('确定删除这个板块吗？')){
+  if(!row) return vipAlert('请先选中一个板块');
+  if(row.id === 'footerRow') return vipAlert('底部版权板块建议保留；需要删除可以直接清空文字。');
+  if(await vipConfirm('确定删除这个板块吗？',{title:'删除板块',confirmText:'删除',danger:true})){
     row.remove();
     selectedBlock = null;
     positionHeightResizer();
@@ -2206,7 +2207,7 @@ function outputPdf(){
   const palette = buildThemePalette(themeColor);
   const printWindow = window.open('', '_blank', 'width=900,height=1000');
   if(!printWindow){
-    alert('浏览器阻止了打印窗口，请允许此页面打开弹窗后再试。');
+    vipAlert('浏览器阻止了打印窗口，请允许此页面打开弹窗后再试。');
     return;
   }
 
@@ -2418,10 +2419,10 @@ function markImportedRowsEditable(){
   fitAllAutoTitles();
 }
 
-function importCleanHtml(input){
+async function importCleanHtml(input){
   const file = input && input.files && input.files[0];
   if(!file) return;
-  if(!confirm('打开这个干净HTML会覆盖当前正在编辑的内容，确定继续吗？')){
+  if(!await vipConfirm('打开这个干净HTML会覆盖当前正在编辑的内容，确定继续吗？',{title:'打开干净 HTML',confirmText:'继续打开',danger:true})){
     input.value = '';
     return;
   }
@@ -2458,7 +2459,7 @@ function importCleanHtml(input){
       initHistory();
       flash('已打开干净HTML，现在可以继续编辑');
     }catch(err){
-      alert('打开失败：' + (err && err.message ? err.message : err));
+      vipAlert('打开失败：' + (err && err.message ? err.message : err));
     }finally{
       input.value = '';
     }
@@ -2471,10 +2472,10 @@ function saveDraft(){
   flash('已保存到本浏览器本地');
 }
 
-function loadDraft(){
+async function loadDraft(){
   const draft = localStorage.getItem('onchain_email_editor_draft');
-  if(!draft) return alert('没有找到本地草稿');
-  if(confirm('读取草稿会覆盖当前页面内容，确定吗？')){
+  if(!draft) return vipAlert('没有找到本地草稿');
+  if(await vipConfirm('读取草稿会覆盖当前页面内容，确定吗？',{title:'读取本地草稿',confirmText:'读取',danger:true})){
     document.getElementById('emailRoot').innerHTML = draft;
     normalizeEmailResponsiveWidths();
     selectedBlock = null;
