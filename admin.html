@@ -1,0 +1,982 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>墨森维权客户登记系统 · 管理员</title><link rel="icon" type="image/svg+xml" href="./mosen-logo.svg?v=20260926-18"><link rel="stylesheet" href="./style.css?v=20260927-36"></head><body>
+<div id="loginView" class="login-wrap"><div class="login-box"><div class="pill">管理员入口</div><h1 style="margin-top:12px">登录管理后台</h1><div class="muted">请输入管理员密码。</div><div class="field" style="margin-top:20px"><label>管理员密码</label><input id="adminPassword" type="password" autocomplete="current-password" placeholder="请输入密码"></div><button id="adminLogin" class="btn primary" style="width:100%;margin-top:18px">登录</button><div id="loginNote" class="notice" hidden></div></div></div>
+
+<div id="appView" hidden>
+  <div class="topbar">
+    <div class="brand-lockup"><img class="brand-logo" src="./mosen-logo.svg?v=20260926-18" alt="墨森"><div><div class="brand">墨森维权客户登记系统 · 管理员</div><div class="subbrand">客户与业务员管理</div></div></div>
+    <div class="row"><a href="./login.html" class="btn soft hide-mobile">业务员入口</a><button id="logoutBtn" class="btn soft">退出</button></div>
+  </div>
+
+  <div class="shell admin-shell">
+    <aside class="admin-sidebar">
+      <div class="sidebar-card">
+        <div class="sidebar-section-title">客户视图</div>
+        <button class="sidebar-item active" data-view="all">
+          <span class="sidebar-icon">▦</span><span class="sidebar-text">全部客户</span><span id="allCustomerCount" class="sidebar-count">0</span>
+        </button>
+        <button class="sidebar-item" data-view="archive">
+          <span class="sidebar-icon">▣</span><span class="sidebar-text">归档客户</span><span id="archivedCustomerCount" class="sidebar-count">0</span>
+        </button>
+        <div id="repCustomerNav" class="rep-customer-nav"></div>
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-section-title">管理</div>
+        <button class="sidebar-item" data-view="reps"><span class="sidebar-icon">◎</span><span class="sidebar-text">业务员管理</span></button>
+        <button class="sidebar-item" data-view="fields"><span class="sidebar-icon">≡</span><span class="sidebar-text">登记字段</span><span id="sidebarFieldCount" class="sidebar-count">0</span></button>
+        <button class="sidebar-item" data-view="progress"><span class="sidebar-icon">✓</span><span class="sidebar-text">客户进度</span><span id="sidebarProgressCount" class="sidebar-count">0</span></button>
+        <button class="sidebar-item" data-view="logs"><span class="sidebar-icon">◷</span><span class="sidebar-text">日志</span><span id="sidebarLogCount" class="sidebar-count">0</span></button>
+        <button class="sidebar-item" data-view="backup"><span class="sidebar-icon">⇅</span><span class="sidebar-text">备份恢复</span></button>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <div class="stats">
+        <div class="stat"><div id="totalCustomers" class="n">0</div><div class="l">正常客户</div></div>
+        <div class="stat"><div id="archivedCustomersStat" class="n">0</div><div class="l">归档客户</div></div>
+        <div class="stat"><div id="salesCount" class="n">0</div><div class="l">业务员用户名</div></div>
+        <div class="stat"><div id="activeFields" class="n">0</div><div class="l">启用登记项目</div></div>
+      </div>
+
+      <section id="view-customers" class="admin-view">
+        <div class="card">
+          <div class="row customer-toolbar">
+            <div>
+              <h2 id="customerViewTitle" style="margin:0">全部客户</h2>
+              <div id="customerViewDesc" class="small">显示所有业务员登记的正常客户。</div>
+            </div>
+            <div class="spacer"></div>
+            <input id="customerSearch" class="search" placeholder="全局搜索姓名 / 电话 / 邮箱 / 钱包等…">
+            <button id="toggleAdminFilters" class="btn soft" type="button">筛选</button>
+            <button id="exportBtn" class="btn soft">导出 CSV</button>
+            <button id="refreshCustomers" class="btn soft">刷新</button>
+          </div>
+          <div id="adminFilters" class="customer-filter-panel" hidden>
+            <div class="field"><label>业务员</label><select id="adminRepFilter"><option value="">全部业务员</option></select></div>
+            <div class="field"><label>重点客户</label><select id="adminStarFilter"><option value="">全部</option><option value="1">只看星标</option><option value="0">只看未星标</option></select></div>
+            <div class="field"><label>客户进度</label><select id="adminProgressFilter"><option value="">全部进度</option></select></div>
+            <div class="field"><label>国家/地区包含</label><input id="adminCountryFilter" placeholder="例如 德国 / 美国"></div>
+            <button id="clearAdminFilters" class="btn soft" type="button">清除筛选</button>
+          </div>
+          <div id="customerList" style="margin-top:16px"></div>
+        </div>
+      </section>
+
+      <section id="view-reps" class="admin-view" hidden>
+        <div class="card">
+          <div class="section-title"><div class="dot"></div><h2>业务员管理</h2><div class="spacer"></div><span class="pill">用户名登录 · 无需密码</span></div>
+          <div class="grid3">
+            <div class="field"><label>业务员用户名</label><input id="repUsername" placeholder="例如 zhangsan"></div>
+            <div class="field"><label>显示名称（可选）</label><input id="repDisplayName" placeholder="例如 张三"></div>
+          </div>
+          <div class="row" style="margin-top:14px"><button id="createRep" class="btn primary">创建业务员用户名</button><button id="refreshReps" class="btn soft">刷新列表</button></div>
+          <div id="repNote" class="notice" hidden></div>
+          <div id="repList" style="margin-top:16px"></div>
+        </div>
+      </section>
+
+      <section id="view-fields" class="admin-view" hidden>
+        <div class="card">
+          <div class="section-title"><div class="dot"></div><h2>登记字段管理</h2><div class="spacer"></div><span class="pill">拖拽排序 · 业务员自动同步</span></div>
+          <div class="grid3">
+            <div class="field"><label>字段名称</label><input id="fieldLabel" placeholder="例如 客户生日"></div>
+            <div class="field"><label>字段类型</label><select id="fieldType"><option value="text">文本</option><option value="number">数字</option><option value="date">日期时间（24小时制）</option><option value="datetime">日期时间（24小时制）</option><option value="email">邮箱</option><option value="tel">电话</option><option value="textarea">长文本</option><option value="select">下拉选项</option></select></div>
+            <div class="field"><label>下拉选项（逗号分隔）</label><input id="fieldOptions" placeholder="例如 高,中,低"></div>
+            <div class="field"><label>是否必填</label><select id="fieldRequired"><option value="false">非必填</option><option value="true">必填</option></select></div>
+          </div>
+          <div class="row field-group-actions" style="margin-top:14px;flex-wrap:wrap">
+            <button id="addField" class="btn primary">添加登记项目</button>
+            <button id="setFieldGroup" class="btn soft" type="button">设置分栏</button>
+            <button id="removeFieldGroup" class="btn soft" type="button">移出分栏</button>
+            <span id="fieldSelectionCount" class="small">未选择字段</span>
+          </div>
+          <div id="fieldNote" class="notice" hidden></div>
+          <div id="fieldList" style="margin-top:16px"></div>
+        </div>
+      </section>
+
+      <section id="view-progress" class="admin-view" hidden>
+        <div class="card">
+          <div class="section-title"><div class="dot"></div><h2>客户进度管理</h2><div class="spacer"></div><span class="pill">拖拽排序 · 业务员自动同步</span></div>
+          <div class="row">
+            <div class="field" style="min-width:300px;flex:1"><label>新增进度名称</label><input id="progressLabel" placeholder="例如 已联系 / 跟进中 / 已成交"></div>
+            <button id="addProgress" class="btn primary" style="align-self:flex-end">添加进度</button>
+          </div>
+          <div id="progressNote" class="notice" hidden></div>
+          <div id="progressList" style="margin-top:16px"></div>
+        </div>
+      </section>
+      <section id="view-logs" class="admin-view" hidden>
+        <div class="card">
+          <div class="row">
+            <div><h2 style="margin:0">业务员操作日志</h2><div class="small">默认显示今天。新增登记字段或客户进度后，日志会自动按当时的名称记录。</div></div>
+            <div class="spacer"></div>
+            <input id="logDate" type="date" class="search" style="min-width:160px">
+            <input id="logSearch" class="search" placeholder="搜索业务员 / 客户 / 操作…">
+            <button id="refreshLogs" class="btn soft">刷新</button>
+          </div>
+          <div id="logList" style="margin-top:16px"></div>
+        </div>
+      </section>
+
+      <section id="view-backup" class="admin-view" hidden>
+        <div class="card">
+          <div class="section-title"><div class="dot"></div><h2>系统完整备份 / 恢复</h2><div class="spacer"></div><span class="pill">一键迁移全部数据和设置</span></div>
+          <div class="backup-intro">V3 完整备份包含：全部业务员、登记字段与类型/顺序/下拉选项、客户进度与顺序、全部动态客户资料、每个客户已完成进度、操作日志。导出带完整性校验码；导入前先校验并自动下载当前系统安全备份。</div>
+          <div class="backup-actions">
+            <button id="exportBackup" class="btn primary">导出完整备份</button>
+            <button id="importBackup" class="btn soft">导入备份并恢复</button>
+            <input id="backupFile" type="file" accept=".json,application/json" hidden>
+          </div>
+          <div class="notice warn" style="margin-top:16px">导入恢复会清空当前系统的数据，然后按备份文件重建。请只导入本系统导出的备份文件。</div>
+          <div id="backupNote" class="notice" hidden></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="customerModal" class="modal" hidden>
+  <div class="modal-card customer-edit-modal-card">
+    <div class="row customer-edit-modal-header"><h2 style="margin:0">编辑客户</h2><div class="spacer"></div><button id="closeCustomerModal" class="btn soft">关闭</button></div>
+    <div class="field" style="margin-top:18px"><label>所属业务员</label><select id="editRep"></select></div>
+    <form id="customerEditForm">
+      <div id="customerEditFields" class="grid" style="margin-top:18px"></div>
+      <div class="progress-editor progress-editor-prominent admin-progress-editor">
+        <div class="section-title" style="margin:0 0 10px"><div class="dot"></div><h3 style="margin:0">客户进度</h3><div class="spacer"></div><strong id="adminEditProgressPercent" class="edit-progress-percent">0%</strong></div>
+        <div class="percent-progress edit-percent-bar"><span id="adminEditProgressBar" style="width:0%"></span></div>
+        <div class="small" style="margin:8px 0 12px">管理员也可以直接勾选或取消客户进度。</div>
+        <div id="adminProgressChecklist" class="progress-checklist"></div>
+      </div>
+      <div class="row customer-edit-save-bar"><button class="btn primary" type="submit">保存修改</button><button id="cancelCustomerEdit" class="btn soft" type="button">取消</button></div>
+    </form>
+    <div id="customerEditNote" class="notice" hidden></div>
+  </div>
+</div>
+
+
+<div id="fieldTypeModal" class="modal" hidden>
+  <div class="modal-card" style="max-width:520px">
+    <div class="row"><h2 style="margin:0">编辑字段</h2><div class="spacer"></div><button id="closeFieldTypeModal" class="btn soft" type="button">关闭</button></div>
+    <div class="field" style="margin-top:18px">
+      <label>字段名称</label>
+      <input id="fieldTypeFieldName" placeholder="请输入字段名称">
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label>字段类型</label>
+      <select id="changeFieldType">
+        <option value="text">文本</option>
+        <option value="number">数字</option>
+        <option value="date">日期时间（24小时制）</option>
+        <option value="datetime">日期时间（24小时制）</option>
+        <option value="email">邮箱</option>
+        <option value="tel">电话</option>
+        <option value="textarea">长文本</option>
+        <option value="select">下拉选项</option>
+      </select>
+    </div>
+    <div id="changeFieldOptionsWrap" class="field" style="margin-top:14px" hidden>
+      <label>下拉选项（逗号分隔）</label>
+      <input id="changeFieldOptions" placeholder="例如 高,中,低">
+    </div>
+    <div class="row" style="margin-top:18px">
+      <button id="saveFieldType" class="btn primary" type="button">保存修改</button>
+      <button id="cancelFieldType" class="btn soft" type="button">取消</button>
+    </div>
+    <div id="fieldTypeNote" class="notice" hidden></div>
+  </div>
+</div>
+
+<div id="fieldGroupModal" class="modal" hidden>
+  <div class="modal-card" style="max-width:520px">
+    <div class="row"><h2 style="margin:0">设置字段分栏</h2><div class="spacer"></div><button id="closeFieldGroupModal" class="btn soft" type="button">关闭</button></div>
+    <div class="small" style="margin-top:10px">把已勾选的登记字段归到同一个栏里。业务员登记、编辑和客户预览都会按这个栏单独显示。</div>
+    <div class="field" style="margin-top:16px">
+      <label>分栏名称</label>
+      <input id="fieldGroupName" placeholder="例如 基本信息 / 资金信息 / 钱包信息">
+    </div>
+    <div class="row" style="margin-top:18px">
+      <button id="saveFieldGroup" class="btn primary" type="button">保存分栏</button>
+      <button id="cancelFieldGroup" class="btn soft" type="button">取消</button>
+    </div>
+    <div id="fieldGroupNote" class="notice" hidden></div>
+  </div>
+</div>
+
+<script type="module">
+import { base44, esc, showMessage, buildFieldControl, buildGroupedFieldControls, initDateTimeControls, formatDate, downloadCsv, uiAlert, uiConfirm, uiPrompt } from './base44.js?v=20260927-33';
+const ADMIN_HASH='78fd5f1e5a3f6eef05ab8d692942fd0ff4a8f4cc0e6087026626006a7fae452d';
+let reps=[],fields=[],customers=[],progressStages=[],editingCustomerId=null,draggedFieldId=null,dragSaving=false,draggedProgressId=null,progressDragSaving=false,editingFieldTypeId=null;
+let currentView='all',currentRepFilter='';
+const CUSTOMER_PAGE_SIZE=50;
+let customerPage=1,customerHasNext=false,totalCustomerCount=0,totalArchivedCount=0,customerCountByRep={},archivedCountByRep={},customerCountTimer=null,globalCustomerRows=null,searchTimer=null,adminEditorBaseline='',adminDraftTimer=null;
+let adminCustomerFormSaving=false;
+
+const loginView=document.getElementById('loginView'),appView=document.getElementById('appView'),loginNote=document.getElementById('loginNote');
+const customerModal=document.getElementById('customerModal'),customerEditForm=document.getElementById('customerEditForm'),customerEditNote=document.getElementById('customerEditNote');
+
+function unwrap(v){return Array.isArray(v)?v:(v?.items||[])}
+async function sha256(v){const b=new TextEncoder().encode(v);const h=await crypto.subtle.digest('SHA-256',b);return [...new Uint8Array(h)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+
+function showAdminView(view,repUsername=''){
+  currentView=view;currentRepFilter=repUsername||'';
+  document.querySelectorAll('.admin-view').forEach(x=>x.hidden=true);
+  document.querySelectorAll('.sidebar-item').forEach(x=>x.classList.remove('active'));
+
+  if(view==='all'||view==='rep'||view==='archive'){
+    document.getElementById('view-customers').hidden=false;
+    if(view==='all'){
+      document.querySelector('.sidebar-item[data-view="all"]').classList.add('active');
+      document.getElementById('customerViewTitle').textContent='全部客户';
+      document.getElementById('customerViewDesc').textContent='显示所有业务员登记的正常客户。';
+    }else if(view==='archive'){
+      document.querySelector('.sidebar-item[data-view="archive"]').classList.add('active');
+      document.getElementById('customerViewTitle').textContent='归档客户';
+      document.getElementById('customerViewDesc').textContent='归档客户资料不会删除，可以预览、复制、恢复或由管理员永久删除。';
+    }else{
+      const rep=reps.find(r=>String(r.username||'')===String(repUsername));
+      const btn=[...document.querySelectorAll('.sidebar-item[data-rep]')].find(x=>x.dataset.rep===repUsername);
+      if(btn)btn.classList.add('active');
+      const name=rep?.display_name||rep?.username||repUsername;
+      document.getElementById('customerViewTitle').textContent=name+' 的客户';
+      document.getElementById('customerViewDesc').textContent='只显示业务员 '+repUsername+' 登记的客户。';
+    }
+    customerPage=1;loadCustomers({resetPage:true});return;
+  }
+  if(view==='reps'){document.getElementById('view-reps').hidden=false;document.querySelector('.sidebar-item[data-view="reps"]').classList.add('active')}
+  if(view==='fields'){document.getElementById('view-fields').hidden=false;document.querySelector('.sidebar-item[data-view="fields"]').classList.add('active')}
+  if(view==='progress'){document.getElementById('view-progress').hidden=false;document.querySelector('.sidebar-item[data-view="progress"]').classList.add('active')}
+  if(view==='logs'){document.getElementById('view-logs').hidden=false;document.querySelector('.sidebar-item[data-view="logs"]').classList.add('active');loadLogs()}
+  if(view==='backup'){document.getElementById('view-backup').hidden=false;document.querySelector('.sidebar-item[data-view="backup"]').classList.add('active')}
+}
+document.querySelector('.sidebar-item[data-view="all"]').onclick=()=>showAdminView('all');
+document.querySelector('.sidebar-item[data-view="archive"]').onclick=()=>showAdminView('archive');
+document.querySelector('.sidebar-item[data-view="reps"]').onclick=()=>showAdminView('reps');
+document.querySelector('.sidebar-item[data-view="fields"]').onclick=()=>showAdminView('fields');
+document.querySelector('.sidebar-item[data-view="progress"]').onclick=()=>showAdminView('progress');
+document.querySelector('.sidebar-item[data-view="logs"]').onclick=()=>showAdminView('logs');
+document.querySelector('.sidebar-item[data-view="backup"]').onclick=()=>showAdminView('backup');
+
+async function enter(){
+  loginView.hidden=true;appView.hidden=false;
+  document.getElementById('logDate').value=new Date().toISOString().slice(0,10);
+  await Promise.all([loadReps(),loadFields(),loadProgress(),loadLogs(),refreshCustomerCounts()]);
+  showAdminView('all');
+  try{
+    base44.entities.SalesRep.subscribe(()=>loadReps());
+    base44.entities.FormField.subscribe(()=>{if(!dragSaving){loadFields();loadCustomers()}});
+    base44.entities.ProgressStage.subscribe(()=>{if(!progressDragSaving){loadProgress();loadCustomers()}});
+    base44.entities.Customer.subscribe(()=>{loadCustomers();scheduleCustomerCountRefresh()});
+    base44.entities.ActivityLog.subscribe(()=>loadLogs());
+  }catch(_){}
+}
+document.getElementById('adminLogin').onclick=async()=>{
+  const p=document.getElementById('adminPassword').value;
+  if(!p){showMessage(loginNote,'请输入管理员密码。','err');return}
+  if(await sha256(p)!==ADMIN_HASH){showMessage(loginNote,'管理员密码错误。','err');return}
+  localStorage.setItem('m717_admin','1');await enter()
+};
+
+async function loadReps(){
+  try{
+    reps=unwrap(await base44.entities.SalesRep.list({sort:'-created_date',limit:500}));
+    document.getElementById('salesCount').textContent=reps.length;
+    const rf=document.getElementById('adminRepFilter');if(rf)rf.innerHTML='<option value="">全部业务员</option>'+reps.map(r=>'<option value="'+esc(r.username)+'">'+esc(r.display_name||r.username)+'</option>').join('');
+    renderReps();renderSidebar();
+  }catch(err){document.getElementById('repList').innerHTML='<div class="notice err">读取业务员失败：'+esc(err?.message||String(err))+'</div>'}
+}
+function renderSidebar(){
+  const nav=document.getElementById('repCustomerNav');
+  nav.innerHTML=reps.map(r=>{
+    const count=customerCountByRep[String(r.username||'')]||0, archived=archivedCountByRep[String(r.username||'')]||0;
+    const label=r.display_name||r.username||'未命名';
+    return '<button class="sidebar-item" data-view="rep" data-rep="'+esc(r.username||'')+'"><span class="sidebar-avatar">'+esc(String(label).slice(0,1).toUpperCase())+'</span><span class="sidebar-text"><b>'+esc(label)+'</b><small>'+esc(r.username||'')+' · 归档 '+archived+'</small></span><span class="sidebar-count">'+count+'</span></button>';
+  }).join('');
+  nav.querySelectorAll('.sidebar-item[data-rep]').forEach(btn=>btn.onclick=()=>showAdminView('rep',btn.dataset.rep));
+}
+function renderReps(){
+  const box=document.getElementById('repList');
+  if(!reps.length){box.innerHTML='<div class="empty">还没有业务员用户名</div>';return}
+  box.innerHTML='<div class="table-wrap"><table><thead><tr><th>用户名</th><th>显示名称</th><th>客户数</th><th>创建时间</th><th>操作</th></tr></thead><tbody>'+reps.map(r=>{
+    const count=customerCountByRep[String(r.username||'')]||0;
+    return '<tr><td><b>'+esc(r.username||'')+'</b></td><td>'+esc(r.display_name||'')+'</td><td>'+count+'</td><td>'+esc(formatDate(r.created_date))+'</td><td><button class="btn danger delrep" data-id="'+r.id+'">删除</button></td></tr>';
+  }).join('')+'</tbody></table></div>';
+  box.querySelectorAll('.delrep').forEach(b=>b.onclick=async()=>{if(!await uiConfirm('删除后这个业务员将无法继续登录。',{title:'删除业务员',confirmText:'确认删除',danger:true}))return;await base44.entities.SalesRep.delete(b.dataset.id);await loadReps()})
+}
+document.getElementById('createRep').onclick=async()=>{
+  const username=document.getElementById('repUsername').value.trim(),display_name=document.getElementById('repDisplayName').value.trim(),note=document.getElementById('repNote');
+  if(!username){showMessage(note,'请输入业务员用户名。','err');return}
+  try{
+    const current=unwrap(await base44.entities.SalesRep.list({sort:'-created_date',limit:500}));
+    if(current.some(r=>String(r.username||'').toLowerCase()===username.toLowerCase())){showMessage(note,'这个用户名已经存在。','err');return}
+    await base44.entities.SalesRep.create({username,display_name});showMessage(note,'业务员用户名已创建：'+username,'ok');
+    document.getElementById('repUsername').value='';document.getElementById('repDisplayName').value='';await loadReps()
+  }catch(err){showMessage(note,'创建失败：'+(err?.message||String(err)),'err')}
+};
+
+async function loadFields(){
+  try{
+    fields=unwrap(await base44.entities.FormField.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
+    const activeCount=fields.filter(f=>f.active!==false).length;
+    document.getElementById('activeFields').textContent=activeCount;document.getElementById('sidebarFieldCount').textContent=activeCount;
+    renderFields();
+  }catch(err){document.getElementById('fieldList').innerHTML='<div class="notice err">读取登记字段失败：'+esc(err?.message||String(err))+'</div>'}
+}
+function waitMs(ms){return new Promise(resolve=>setTimeout(resolve,ms))}
+async function retryRateLimited(fn,attempts=4){
+  let lastErr;
+  for(let i=0;i<attempts;i++){
+    try{return await fn()}catch(err){
+      lastErr=err;
+      const msg=String(err?.message||err||'').toLowerCase();
+      if(!msg.includes('rate limit')&&!msg.includes('429'))throw err;
+      if(i<attempts-1)await waitMs(500*(i+1));
+    }
+  }
+  throw lastErr;
+}
+function newOrderForMovedItem(items,index){
+  if(items.length<=1)return 1000;
+  const prev=index>0?Number(items[index-1]?.order):null;
+  const next=index<items.length-1?Number(items[index+1]?.order):null;
+  if(index===0)return Number.isFinite(next)?next-1:0;
+  if(index===items.length-1)return Number.isFinite(prev)?prev+1:index+1;
+  if(Number.isFinite(prev)&&Number.isFinite(next))return (prev+next)/2;
+  return index+1;
+}
+function fieldTypeLabel(type){
+  return ({text:'文本',number:'数字',date:'日期时间（24小时制）',datetime:'日期时间（24小时制）',email:'邮箱',tel:'电话',textarea:'长文本',select:'下拉选项'})[type]||type||'文本';
+}
+function selectedFieldIds(){
+  return [...document.querySelectorAll('#fieldList .field-select-checkbox:checked')].map(x=>x.value);
+}
+function updateFieldSelectionCount(){
+  const ids=selectedFieldIds(),el=document.getElementById('fieldSelectionCount');
+  el.textContent=ids.length?('已选择 '+ids.length+' 个字段'):'未选择字段';
+}
+function renderFields(){
+  const box=document.getElementById('fieldList');
+  if(!fields.length){box.innerHTML='<div class="empty">暂无登记项目</div>';updateFieldSelectionCount();return}
+  box.innerHTML='<div class="field-sort-list">'+fields.map((f,i)=>'<div class="field-sort-row" draggable="true" data-id="'+f.id+'"><label class="field-select-wrap" title="选择字段"><input class="field-select-checkbox" type="checkbox" value="'+f.id+'"><span></span></label><div class="drag-handle">☰</div><div class="field-sort-name"><b>'+esc(f.label)+'</b><span>'+esc(fieldTypeLabel(f.field_type))+(f.required?' · 必填':'')+(f.group_name?' · <em class="field-group-badge">分栏：'+esc(f.group_name)+'</em>':'')+'</span></div><div class="field-sort-order">第 '+(i+1)+' 项</div><div class="row"><button class="btn soft change-type" data-id="'+f.id+'">编辑字段</button><button class="btn soft toggle" data-id="'+f.id+'" data-active="'+(f.active!==false)+'">'+(f.active===false?'启用':'停用')+'</button><button class="btn danger remove" data-id="'+f.id+'">删除</button></div></div>').join('')+'</div>';
+  box.querySelectorAll('.field-select-checkbox').forEach(cb=>{cb.onclick=e=>e.stopPropagation();cb.onchange=updateFieldSelectionCount});
+  box.querySelectorAll('.change-type').forEach(b=>b.onclick=e=>{e.stopPropagation();openFieldTypeModal(b.dataset.id)});
+  box.querySelectorAll('.toggle').forEach(b=>b.onclick=async e=>{e.stopPropagation();await base44.entities.FormField.update(b.dataset.id,{active:b.dataset.active!=='true'});await loadFields()});
+  box.querySelectorAll('.remove').forEach(b=>b.onclick=async e=>{e.stopPropagation();if(!await uiConfirm('删除后该登记字段将不再显示，请确认是否继续。',{title:'删除登记字段',confirmText:'确认删除',danger:true}))return;await base44.entities.FormField.delete(b.dataset.id);await loadFields()});
+  box.querySelectorAll('.field-sort-row').forEach(row=>{
+    row.ondragstart=e=>{if(e.target.closest('.field-select-wrap')){e.preventDefault();return}draggedFieldId=row.dataset.id;row.classList.add('dragging');e.dataTransfer.effectAllowed='move'};
+    row.ondragend=()=>{row.classList.remove('dragging');draggedFieldId=null};
+    row.ondragover=e=>e.preventDefault();
+    row.ondrop=async e=>{e.preventDefault();if(!draggedFieldId||draggedFieldId===row.dataset.id)return;const movedId=draggedFieldId,from=fields.findIndex(x=>x.id===movedId),to=fields.findIndex(x=>x.id===row.dataset.id);if(from<0||to<0)return;const next=[...fields],m=next.splice(from,1)[0];next.splice(to,0,m);fields=next;const newOrder=newOrderForMovedItem(fields,to);m.order=newOrder;renderFields();await saveFieldOrder(movedId,newOrder)}
+  });
+  updateFieldSelectionCount();
+}
+function openFieldTypeModal(id){
+  const field=fields.find(x=>String(x.id)===String(id));if(!field)return;
+  editingFieldTypeId=field.id;
+  document.getElementById('fieldTypeFieldName').value=field.label||'';
+  document.getElementById('changeFieldType').value=field.field_type||'text';
+  document.getElementById('changeFieldOptions').value=field.options||'';
+  document.getElementById('changeFieldOptionsWrap').hidden=(field.field_type!=='select');
+  document.getElementById('fieldTypeNote').hidden=true;
+  document.getElementById('fieldTypeModal').hidden=false;
+}
+function closeFieldTypeModal(){
+  editingFieldTypeId=null;
+  document.getElementById('fieldTypeModal').hidden=true;
+}
+document.getElementById('changeFieldType').onchange=e=>{
+  document.getElementById('changeFieldOptionsWrap').hidden=(e.target.value!=='select');
+};
+document.getElementById('closeFieldTypeModal').onclick=closeFieldTypeModal;
+document.getElementById('cancelFieldType').onclick=closeFieldTypeModal;
+document.getElementById('fieldTypeModal').onclick=e=>{if(e.target.id==='fieldTypeModal')closeFieldTypeModal()};
+document.getElementById('saveFieldType').onclick=async()=>{
+  const note=document.getElementById('fieldTypeNote'),label=document.getElementById('fieldTypeFieldName').value.trim(),type=document.getElementById('changeFieldType').value,options=document.getElementById('changeFieldOptions').value.trim();
+  if(!editingFieldTypeId)return;
+  if(!label){showMessage(note,'字段名称不能为空。','err');return}
+  if(type==='select'&&!options){showMessage(note,'下拉选项不能为空。','err');return}
+  try{
+    await base44.entities.FormField.update(editingFieldTypeId,{label,field_type:type,options:type==='select'?options:''});
+    showMessage(note,'字段名称和类型已更新。','ok');
+    await loadFields();
+    setTimeout(closeFieldTypeModal,250);
+  }catch(err){showMessage(note,'修改失败：'+(err?.message||String(err)),'err')}
+};
+function closeFieldGroupModal(){
+  document.getElementById('fieldGroupModal').hidden=true;
+  document.getElementById('fieldGroupNote').hidden=true;
+}
+document.getElementById('setFieldGroup').onclick=()=>{
+  const ids=selectedFieldIds(),note=document.getElementById('fieldNote');
+  if(!ids.length){showMessage(note,'请先勾选要放进同一栏的登记字段。','err');return}
+  const chosen=fields.filter(f=>ids.includes(String(f.id)));
+  const groups=[...new Set(chosen.map(f=>String(f.group_name||'').trim()).filter(Boolean))];
+  document.getElementById('fieldGroupName').value=groups.length===1?groups[0]:'';
+  document.getElementById('fieldGroupModal').hidden=false;
+  document.getElementById('fieldGroupNote').hidden=true;
+};
+document.getElementById('closeFieldGroupModal').onclick=closeFieldGroupModal;
+document.getElementById('cancelFieldGroup').onclick=closeFieldGroupModal;
+document.getElementById('fieldGroupModal').onclick=e=>{if(e.target.id==='fieldGroupModal')closeFieldGroupModal()};
+document.getElementById('saveFieldGroup').onclick=async()=>{
+  const ids=selectedFieldIds(),name=document.getElementById('fieldGroupName').value.trim(),note=document.getElementById('fieldGroupNote');
+  if(!ids.length){showMessage(note,'没有选择字段。','err');return}
+  if(!name){showMessage(note,'请输入分栏名称。','err');return}
+  try{
+    for(const id of ids){await retryRateLimited(()=>base44.entities.FormField.update(id,{group_name:name}));await waitMs(90)}
+    showMessage(note,'分栏已保存。','ok');await loadFields();setTimeout(closeFieldGroupModal,250);
+  }catch(err){showMessage(note,'保存分栏失败：'+(err?.message||String(err)),'err')}
+};
+document.getElementById('removeFieldGroup').onclick=async()=>{
+  const ids=selectedFieldIds(),note=document.getElementById('fieldNote');
+  if(!ids.length){showMessage(note,'请先勾选要移出分栏的字段。','err');return}
+  try{
+    for(const id of ids){await retryRateLimited(()=>base44.entities.FormField.update(id,{group_name:''}));await waitMs(90)}
+    showMessage(note,'所选字段已移出分栏。','ok');await loadFields();
+  }catch(err){showMessage(note,'移出分栏失败：'+(err?.message||String(err)),'err')}
+};
+
+async function saveFieldOrder(movedId,newOrder){
+  const note=document.getElementById('fieldNote');dragSaving=true;
+  try{
+    await retryRateLimited(()=>base44.entities.FormField.update(movedId,{order:newOrder}));
+    showMessage(note,'排序已保存。','ok');
+  }catch(err){
+    showMessage(note,'保存排序失败：'+(err?.message||String(err)),'err');
+    await waitMs(800);
+    await loadFields();
+  }finally{dragSaving=false}
+}
+document.getElementById('addField').onclick=async()=>{
+  const label=document.getElementById('fieldLabel').value.trim(),type=document.getElementById('fieldType').value,options=document.getElementById('fieldOptions').value.trim(),required=document.getElementById('fieldRequired').value==='true',note=document.getElementById('fieldNote');
+  if(!label){showMessage(note,'请输入字段名称。','err');return}
+  try{
+    const nextOrder=fields.length?Math.max(...fields.map(f=>Number(f.order)||0))+1:1;
+    await base44.entities.FormField.create({label,field_key:'f_'+Date.now(),field_type:type,options,required,order:nextOrder,active:true});
+    showMessage(note,'字段已添加。','ok');document.getElementById('fieldLabel').value='';document.getElementById('fieldOptions').value='';await loadFields()
+  }catch(err){showMessage(note,'添加失败：'+(err?.message||'未知错误'),'err')}
+};
+
+async function loadProgress(){
+  try{
+    progressStages=unwrap(await base44.entities.ProgressStage.list({sort:'order',limit:500})).filter(x=>x.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
+    document.getElementById('sidebarProgressCount').textContent=progressStages.length;const pf=document.getElementById('adminProgressFilter');if(pf)pf.innerHTML='<option value="">全部进度</option>'+progressStages.map(p=>'<option value="'+esc(p.id)+'">'+esc(p.label)+'</option>').join('');renderProgress();
+  }catch(err){document.getElementById('progressList').innerHTML='<div class="notice err">读取客户进度失败：'+esc(err?.message||String(err))+'</div>'}
+}
+function renderProgress(){
+  const box=document.getElementById('progressList');
+  if(!progressStages.length){box.innerHTML='<div class="empty">还没有客户进度，先添加一个。</div>';return}
+  box.innerHTML='<div class="field-sort-list">'+progressStages.map((p,i)=>'<div class="field-sort-row progress-sort-row" draggable="true" data-id="'+p.id+'"><div class="drag-handle">☰</div><div class="field-sort-name"><input class="progress-name-input" data-id="'+p.id+'" value="'+esc(p.label)+'"><span>第 '+(i+1)+' 步</span></div><div class="field-sort-order">'+(i+1)+'</div><div class="row"><button class="btn soft save-progress" data-id="'+p.id+'">保存名称</button><button class="btn danger delete-progress" data-id="'+p.id+'">删除</button></div></div>').join('')+'</div>';
+  box.querySelectorAll('.save-progress').forEach(b=>b.onclick=async()=>{const input=box.querySelector('.progress-name-input[data-id="'+b.dataset.id+'"]');const label=input.value.trim();if(!label)return;await base44.entities.ProgressStage.update(b.dataset.id,{label});await loadProgress()});
+  box.querySelectorAll('.delete-progress').forEach(b=>b.onclick=async()=>{if(!await uiConfirm('已有客户的历史勾选不会再显示这个步骤。',{title:'删除客户进度',confirmText:'确认删除',danger:true}))return;await base44.entities.ProgressStage.delete(b.dataset.id);await loadProgress()});
+  box.querySelectorAll('.progress-sort-row').forEach(row=>{
+    row.ondragstart=e=>{draggedProgressId=row.dataset.id;row.classList.add('dragging');e.dataTransfer.effectAllowed='move'};
+    row.ondragend=()=>{row.classList.remove('dragging');draggedProgressId=null};
+    row.ondragover=e=>e.preventDefault();
+    row.ondrop=async e=>{e.preventDefault();if(!draggedProgressId||draggedProgressId===row.dataset.id)return;const movedId=draggedProgressId,from=progressStages.findIndex(x=>x.id===movedId),to=progressStages.findIndex(x=>x.id===row.dataset.id);if(from<0||to<0)return;const next=[...progressStages],m=next.splice(from,1)[0];next.splice(to,0,m);progressStages=next;const newOrder=newOrderForMovedItem(progressStages,to);m.order=newOrder;renderProgress();await saveProgressOrder(movedId,newOrder)}
+  });
+}
+async function saveProgressOrder(movedId,newOrder){
+  const note=document.getElementById('progressNote');progressDragSaving=true;
+  try{
+    await retryRateLimited(()=>base44.entities.ProgressStage.update(movedId,{order:newOrder}));
+    showMessage(note,'进度顺序已保存。','ok');
+  }catch(err){
+    showMessage(note,'进度排序保存失败：'+(err?.message||String(err)),'err');
+    await waitMs(800);
+    await loadProgress();
+  }finally{progressDragSaving=false}
+}
+document.getElementById('addProgress').onclick=async()=>{
+  const label=document.getElementById('progressLabel').value.trim(),note=document.getElementById('progressNote');if(!label){showMessage(note,'请输入进度名称。','err');return}
+  try{const nextOrder=progressStages.length?Math.max(...progressStages.map(p=>Number(p.order)||0))+1:1;await base44.entities.ProgressStage.create({label,order:nextOrder,active:true});document.getElementById('progressLabel').value='';showMessage(note,'进度已添加。','ok');await loadProgress()}
+  catch(err){showMessage(note,'添加失败：'+(err?.message||String(err)),'err')}
+};
+
+function progressStats(row){
+  const done=new Set((row.completed_progress_ids||[]).map(String));
+  const total=progressStages.length;
+  const completed=progressStages.filter(p=>done.has(String(p.id))).length;
+  const percent=total?Math.round(completed/total*100):0;
+  let solid='#98a2b3',fill='rgba(152,162,179,.13)';
+  if(percent>0&&percent<25){solid='#d92d20';fill='rgba(217,45,32,.10)'}
+  else if(percent<50&&percent>0){solid='#dc6803';fill='rgba(220,104,3,.11)'}
+  else if(percent<75&&percent>=50){solid='#1570ef';fill='rgba(21,112,239,.10)'}
+  else if(percent<100&&percent>=75){solid='#7f56d9';fill='rgba(127,86,217,.10)'}
+  else if(percent===100){solid='#079455';fill='rgba(7,148,85,.11)'}
+  return {done,total,completed,percent,solid,fill};
+}
+function progressDetail(row){
+  const s=progressStats(row);
+  if(!s.total)return '<div class="preview-progress-block"><div class="preview-progress-head"><b>客户进度</b><strong>0%</strong></div><div class="percent-progress"><span style="width:0%"></span></div><div class="small" style="margin-top:8px">管理员还没有设置客户进度。</div></div>';
+  return '<div class="preview-progress-block"><div class="preview-progress-head"><b>客户进度</b><strong style="color:'+s.solid+'">'+s.percent+'%</strong></div><div class="percent-progress"><span style="width:'+s.percent+'%;background:'+s.solid+'"></span></div><div class="preview-progress-meta">已完成 '+s.completed+' / '+s.total+' 项</div><div class="preview-stage-list">'+progressStages.map((p,i)=>'<div class="preview-stage '+(s.done.has(String(p.id))?'done':'')+'"><span class="preview-stage-check">'+(s.done.has(String(p.id))?'✓':'')+'</span><span class="preview-stage-index">'+(i+1)+'</span><span class="preview-stage-label">'+esc(p.label)+'</span></div>').join('')+'</div></div>';
+}
+function previewCard(row){
+  const active=fields.filter(f=>f.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
+  const s=progressStats(row);
+  const repOptions=['<option value="">未指定</option>',...reps.map(r=>'<option value="'+esc(r.username)+'" '+(String(row.rep_username||'')===String(r.username||'')?'selected':'')+'>'+esc(r.display_name||r.username)+' ('+esc(r.username)+')</option>')].join('');
+  const done=new Set((row.completed_progress_ids||[]).map(String));
+  const progressHtml=progressStages.length?progressStages.map((p,i)=>'<label class="progress-check '+(done.has(String(p.id))?'checked':'')+'"><input type="checkbox" data-preview-progress-id="'+p.id+'" '+(done.has(String(p.id))?'checked':'')+'><span class="progress-check-index">'+(i+1)+'</span><span class="progress-check-label">'+esc(p.label)+'</span><span class="progress-check-mark">✓</span></label>').join(''):'<div class="progress-empty">管理员还没有设置客户进度。</div>';
+  return '<div class="preview-panel-head"><div><div class="preview-title">客户完整信息</div><div class="preview-subtitle">可直接编辑资料、业务员归属和客户进度</div></div><div class="row"><button class="btn soft preview-copy-btn" type="button">复制资料</button><button class="preview-close-btn" type="button">关闭</button></div></div><div class="preview-meta-row"><div class="field"><label>所属业务员</label><select data-preview-rep>'+repOptions+'</select></div><div class="preview-readonly"><span>登记时间</span><b>'+esc(formatDate(row.created_date)||'—')+'</b></div></div><div class="preview-editor-grid">'+buildGroupedFieldControls(active,row.data||{})+'</div><div class="preview-progress-block preview-progress-edit"><div class="preview-progress-head"><b>客户进度</b><strong data-preview-percent style="color:'+s.solid+'">'+s.percent+'%</strong></div><div class="percent-progress"><span data-preview-bar style="width:'+s.percent+'%;background:'+s.solid+'"></span></div><div class="preview-progress-meta" data-preview-meta>已完成 '+s.completed+' / '+s.total+' 项</div><div class="progress-checklist preview-progress-checklist">'+progressHtml+'</div></div><div class="preview-save-bar"><div class="notice" data-preview-note hidden></div><div class="spacer"></div><button class="btn primary preview-save-btn" type="button">保存修改</button></div>';
+}
+function getPreviewPortal(){
+  let portal=document.getElementById('customerPreviewPortal');
+  if(!portal){portal=document.createElement('div');portal.id='customerPreviewPortal';portal.className='customer-preview-portal';portal.hidden=true;portal.dataset.pinned='0';document.body.appendChild(portal)}
+  return portal;
+}
+function updatePreviewProgressUI(portal){
+  const ids=[...portal.querySelectorAll('[data-preview-progress-id]:checked')].map(x=>x.dataset.previewProgressId);
+  const s=progressStats({completed_progress_ids:ids});
+  const pct=portal.querySelector('[data-preview-percent]'),bar=portal.querySelector('[data-preview-bar]'),meta=portal.querySelector('[data-preview-meta]');
+  if(pct){pct.textContent=s.percent+'%';pct.style.color=s.solid}
+  if(bar){bar.style.width=s.percent+'%';bar.style.background=s.solid}
+  if(meta)meta.textContent='已完成 '+s.completed+' / '+s.total+' 项';
+}
+function attachAdminPreviewEditor(portal,row){
+  portal.querySelector('.preview-close-btn')?.addEventListener('click',()=>{portal.dataset.pinned='0';portal.hidden=true;portal.innerHTML=''});
+  portal.querySelector('.preview-copy-btn')?.addEventListener('click',()=>copyAdminCustomer(row));
+  portal.querySelectorAll('[data-preview-progress-id]').forEach(cb=>cb.onchange=()=>{cb.closest('.progress-check').classList.toggle('checked',cb.checked);updatePreviewProgressUI(portal)});
+  portal.querySelector('.preview-save-btn')?.addEventListener('click',async()=>{
+    const note=portal.querySelector('[data-preview-note]'),btn=portal.querySelector('.preview-save-btn');
+    if(!btn||btn.dataset.saving==='1')return;
+    btn.dataset.saving='1';
+    const originalText=btn.textContent;
+    btn.disabled=true;btn.textContent='保存中…';btn.setAttribute('aria-busy','true');
+    const data={...(row.data||{})};portal.querySelectorAll('[data-key]').forEach(el=>data[el.dataset.key]=el.value);
+    const completed_progress_ids=[...portal.querySelectorAll('[data-preview-progress-id]:checked')].map(x=>x.dataset.previewProgressId);
+    const rep_username=portal.querySelector('[data-preview-rep]')?.value||'';
+    showMessage(note,'正在保存…');
+    try{
+      await base44.entities.Customer.update(row.id,{rep_username,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
+      row.rep_username=rep_username;row.data=data;row.completed_progress_ids=completed_progress_ids;
+      showMessage(note,'已保存并同步。','ok');
+      await loadCustomers();
+      const fresh=customers.find(x=>String(x.id)===String(row.id))||row;
+      portal.innerHTML=previewCard(fresh);initDateTimeControls(portal);portal.hidden=false;portal.dataset.pinned='1';attachAdminPreviewEditor(portal,fresh);
+      const newNote=portal.querySelector('[data-preview-note]');showMessage(newNote,'已保存并同步。','ok');
+    }catch(err){
+      btn.dataset.saving='0';btn.disabled=false;btn.textContent=originalText;btn.removeAttribute('aria-busy');
+      showMessage(note,'保存失败：'+(err?.message||String(err)),'err');
+    }
+  });
+}
+function bindPreviewHover(container){
+  const portal=getPreviewPortal();let timer;
+  const keep=()=>clearTimeout(timer);
+  const hideLater=()=>{clearTimeout(timer);if(portal.dataset.pinned!=='1'){portal.hidden=true;portal.innerHTML=''}};
+  portal.onmouseenter=keep;portal.onmouseleave=hideLater;
+  container.querySelectorAll('.preview-wrap').forEach(w=>{
+    const findRow=()=>customers.find(x=>String(x.id)===String(w.dataset.id));
+    const open=(pin=false)=>{keep();const row=findRow();if(!row)return;portal.innerHTML=previewCard(row);initDateTimeControls(portal);portal.hidden=false;portal.dataset.pinned=pin?'1':'0';attachAdminPreviewEditor(portal,row)};
+    w.onmouseenter=()=>open(false);w.onmouseleave=hideLater;
+    w.querySelector('.eye-btn')?.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();open(true)});
+  });
+}
+
+function updateAdminEditProgressSummary(){
+  const total=progressStages.length;
+  const checked=[...document.querySelectorAll('#adminProgressChecklist input[type="checkbox"]:checked')].length;
+  const percent=total?Math.round(checked/total*100):0;
+  const pseudo={completed_progress_ids:[...document.querySelectorAll('#adminProgressChecklist input[type="checkbox"]:checked')].map(x=>x.dataset.progressId)};
+  const s=progressStats(pseudo);
+  document.getElementById('adminEditProgressPercent').textContent=percent+'%';
+  document.getElementById('adminEditProgressPercent').style.color=s.solid;
+  const bar=document.getElementById('adminEditProgressBar');bar.style.width=percent+'%';bar.style.background=s.solid;
+}
+function renderAdminProgressChecklist(completed=[]){
+  const done=new Set((completed||[]).map(String)),box=document.getElementById('adminProgressChecklist');
+  if(!progressStages.length){box.innerHTML='<div class="progress-empty">还没有设置客户进度。</div>';updateAdminEditProgressSummary();return}
+  box.innerHTML=progressStages.map((p,i)=>'<label class="progress-check '+(done.has(String(p.id))?'checked':'')+'"><input type="checkbox" data-progress-id="'+p.id+'" '+(done.has(String(p.id))?'checked':'')+'><span class="progress-check-index">'+(i+1)+'</span><span class="progress-check-label">'+esc(p.label)+'</span><span class="progress-check-mark">✓</span></label>').join('');
+  box.querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.onchange=()=>{cb.closest('.progress-check').classList.toggle('checked',cb.checked);updateAdminEditProgressSummary()});
+  updateAdminEditProgressSummary();
+}
+
+function localLogDate(value){
+  if(!value)return '';
+  const d=new Date(value);if(Number.isNaN(d.getTime()))return String(value).slice(0,10);
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+function localLogTime(value){
+  if(!value)return '';
+  const d=new Date(value);if(Number.isNaN(d.getTime()))return String(value).replace('T',' ').slice(0,16);
+  return d.toLocaleString('zh-CN',{hour12:false,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+let activityLogs=[];
+async function loadLogs(){
+  const box=document.getElementById('logList');if(!box)return;
+  try{
+    activityLogs=unwrap(await base44.entities.ActivityLog.list({sort:'-created_date',limit:1000}));
+    const date=document.getElementById('logDate')?.value||new Date().toISOString().slice(0,10);
+    const q=(document.getElementById('logSearch')?.value||'').trim().toLowerCase();
+    const todayRows=activityLogs.filter(x=>localLogDate(x.event_time||x.created_date)===date);
+    document.getElementById('sidebarLogCount').textContent=todayRows.length;
+    const rows=todayRows.filter(x=>(String(x.actor_display_name||'')+' '+String(x.actor_username||'')+' '+String(x.customer_name||'')+' '+String(x.message||'')).toLowerCase().includes(q));
+    if(!rows.length){box.innerHTML='<div class="empty">这一天暂无匹配日志</div>';return}
+    box.innerHTML='<div class="activity-list">'+rows.map(x=>'<div class="activity-item"><div class="activity-time">'+esc(localLogTime(x.event_time||x.created_date))+'</div><div class="activity-body"><div class="activity-title">'+esc(x.message||'')+'</div><div class="activity-meta">'+esc(x.actor_display_name||x.actor_username||'未知业务员')+(x.customer_name?' · '+esc(x.customer_name):'')+(x.target_label?' · '+esc(x.target_label):'')+'</div></div></div>').join('')+'</div>';
+  }catch(err){box.innerHTML='<div class="notice err">读取日志失败：'+esc(err?.message||String(err))+'</div>'}
+}
+async function getAllEntityRecords(entityName){
+  const all=[];let skip=0;
+  while(true){
+    const part=unwrap(await base44.entities[entityName].list({sort:'created_date',limit:500,skip}));
+    all.push(...part);if(part.length<500)break;skip+=500;
+  }
+  return all;
+}
+function stripRecord(entityName,row){
+  const common={};
+  const copy=(keys)=>keys.forEach(k=>{if(row[k]!==undefined)common[k]=row[k]});
+  if(entityName==='SalesRep')copy(['username','display_name']);
+  if(entityName==='FormField')copy(['label','field_key','field_type','options','required','order','active','group_name']);
+  if(entityName==='ProgressStage')copy(['label','order','active']);
+  if(entityName==='Customer')copy(['rep_username','data','completed_progress_ids','archived','archived_at','archived_by_username','archived_by_display_name','archived_by_type','archive_reason','starred','admin_sort_score']);
+  if(entityName==='ActivityLog')copy(['actor_username','actor_display_name','actor_type','action_type','customer_id','customer_name','target_key','target_label','old_value','new_value','message','event_time','metadata']);
+  return common;
+}
+async function collectBackupEntities(){
+  const [salesReps,formFields,progressStagesData,customerData,logsData]=await Promise.all([
+    getAllEntityRecords('SalesRep'),getAllEntityRecords('FormField'),getAllEntityRecords('ProgressStage'),getAllEntityRecords('Customer'),getAllEntityRecords('ActivityLog')
+  ]);
+  return {
+    SalesRep:salesReps.map(x=>({...stripRecord('SalesRep',x),__old_id:x.id})),
+    FormField:formFields.map(x=>({...stripRecord('FormField',x),__old_id:x.id})),
+    ProgressStage:progressStagesData.map(x=>({...stripRecord('ProgressStage',x),__old_id:x.id})),
+    Customer:customerData.map(x=>({...stripRecord('Customer',x),__old_id:x.id})),
+    ActivityLog:logsData.map(x=>({...stripRecord('ActivityLog',x),__old_id:x.id}))
+  };
+}
+function backupCounts(entities){
+  return {
+    sales_reps:(entities.SalesRep||[]).length,
+    form_fields:(entities.FormField||[]).length,
+    progress_stages:(entities.ProgressStage||[]).length,
+    customers:(entities.Customer||[]).length,
+    activity_logs:(entities.ActivityLog||[]).length
+  };
+}
+async function makeBackupObject(){
+  const entities=await collectBackupEntities();
+  const checksum=await sha256(JSON.stringify(entities));
+  return {
+    format:'MOSEN717_FULL_BACKUP',
+    version:3,
+    exported_at:new Date().toISOString(),
+    checksum_sha256:checksum,
+    counts:backupCounts(entities),
+    compatibility:{
+      supports_dynamic_fields:true,
+      supports_date_and_datetime:true,
+      datetime_storage:'YYYY-MM-DDTHH:mm',
+      supports_select_options:true,
+      supports_progress_mapping:true,
+      supports_activity_logs:true,
+      supports_field_groups:true
+    },
+    entities
+  };
+}
+function downloadBackupObject(backup,filename){
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();URL.revokeObjectURL(a.href);a.remove();
+}
+async function exportFullBackup(){
+  const note=document.getElementById('backupNote');showMessage(note,'正在读取并校验全部系统数据…');
+  try{
+    const backup=await makeBackupObject();
+    downloadBackupObject(backup,'mosen717-完整备份-V2-'+new Date().toISOString().slice(0,10)+'.json');
+    const n=backup.counts;
+    showMessage(note,'完整备份已导出并生成校验码：业务员 '+n.sales_reps+'、登记字段 '+n.form_fields+'、进度 '+n.progress_stages+'、客户 '+n.customers+'、日志 '+n.activity_logs+'。','ok');
+  }catch(err){showMessage(note,'备份失败：'+(err?.message||String(err)),'err')}
+}
+async function wipeEntity(entityName){
+  while(true){
+    const rows=unwrap(await base44.entities[entityName].list({limit:500}));
+    if(!rows.length)break;
+    for(const row of rows)await base44.entities[entityName].delete(row.id);
+  }
+}
+function withoutOldId(row){const x={...row};delete x.__old_id;return x}
+function createdId(result){
+  return result?.id||result?.data?.id||result?.entity?.id||
+    result?.[0]?.id||result?.items?.[0]?.id||result?.data?.[0]?.id||'';
+}
+function validateBackupStructure(raw){
+  if(raw?.format!=='MOSEN717_FULL_BACKUP'||!raw?.entities)throw new Error('这不是有效的 mosen717 完整备份文件');
+  const e=raw.entities;
+  for(const name of ['SalesRep','FormField','ProgressStage','Customer','ActivityLog']){
+    if(!Array.isArray(e[name]))throw new Error('备份文件缺少 '+name+' 数据表');
+  }
+  const allowedTypes=new Set(['text','number','date','datetime','email','tel','textarea','select']);
+  const fieldKeys=new Set();
+  for(const f of e.FormField){
+    if(!f.field_key)throw new Error('存在缺少 field_key 的登记字段');
+    if(fieldKeys.has(String(f.field_key)))throw new Error('登记字段 key 重复：'+f.field_key);
+    fieldKeys.add(String(f.field_key));
+    if(!allowedTypes.has(String(f.field_type||'')))throw new Error('不支持的字段类型：'+String(f.field_type));
+    if(f.field_type==='select'&&f.options!=null&&typeof f.options!=='string')throw new Error('下拉字段选项格式不正确：'+String(f.label||f.field_key));
+  }
+  for(const p of e.ProgressStage){
+    if(!p.__old_id)throw new Error('客户进度缺少原始 ID，无法安全恢复勾选关系');
+  }
+  for(const cust of e.Customer){
+    if(cust.data!=null&&(typeof cust.data!=='object'||Array.isArray(cust.data)))throw new Error('客户动态资料格式不正确');
+    if(cust.completed_progress_ids!=null&&!Array.isArray(cust.completed_progress_ids))throw new Error('客户进度勾选数据格式不正确');
+  }
+  return true;
+}
+async function validateBackupChecksum(raw){
+  if(Number(raw.version||1)>=2){
+    if(!raw.checksum_sha256)throw new Error('V2 备份缺少完整性校验码');
+    const actual=await sha256(JSON.stringify(raw.entities));
+    if(actual!==raw.checksum_sha256)throw new Error('备份文件校验失败：文件可能已损坏或被修改');
+    const expected=raw.counts||{};
+    const actualCounts=backupCounts(raw.entities);
+    for(const [k,v] of Object.entries(expected)){
+      if(Number(v)!==Number(actualCounts[k]))throw new Error('备份数量校验失败：'+k);
+    }
+  }
+}
+async function restoreEntities(entities){
+  for(const row of entities.SalesRep||[])await base44.entities.SalesRep.create(withoutOldId(row));
+  for(const row of entities.FormField||[])await base44.entities.FormField.create(withoutOldId(row));
+
+  const progressRows=entities.ProgressStage||[];
+  for(const row of progressRows)await base44.entities.ProgressStage.create(withoutOldId(row));
+
+  // Do not rely only on create() return shape. Re-read all restored progress rows and map by sorted backup order.
+  const restoredProgress=unwrap(await base44.entities.ProgressStage.list({sort:'order',limit:500})).sort((a,b)=>(a.order||0)-(b.order||0));
+  const sortedBackupProgress=[...progressRows].sort((a,b)=>(a.order||0)-(b.order||0));
+  const progressMap={};
+  for(let i=0;i<sortedBackupProgress.length;i++){
+    const old=sortedBackupProgress[i]?.__old_id,newRow=restoredProgress[i];
+    if(old&&newRow?.id)progressMap[String(old)]=String(newRow.id);
+  }
+  if(sortedBackupProgress.length!==restoredProgress.length)throw new Error('客户进度恢复数量不一致');
+
+  const customerMap={};
+  for(const row of entities.Customer||[]){
+    const old=row.__old_id,clean=withoutOldId(row);
+    clean.data=(clean.data&&typeof clean.data==='object')?clean.data:{};
+    clean.completed_progress_ids=(clean.completed_progress_ids||[]).map(id=>progressMap[String(id)]||'').filter(Boolean);
+    const created=await base44.entities.Customer.create(clean);
+    const cid=createdId(created);
+    if(old&&cid)customerMap[String(old)]=String(cid);
+  }
+
+  for(const row of entities.ActivityLog||[]){
+    const clean=withoutOldId(row);
+    if(clean.customer_id&&customerMap[String(clean.customer_id)])clean.customer_id=customerMap[String(clean.customer_id)];
+    if(clean.action_type?.startsWith('progress_')&&clean.target_key&&progressMap[String(clean.target_key)])clean.target_key=progressMap[String(clean.target_key)];
+    await base44.entities.ActivityLog.create(clean);
+  }
+}
+async function importFullBackup(file){
+  const note=document.getElementById('backupNote');
+  try{
+    showMessage(note,'正在检查备份文件完整性…');
+    const raw=JSON.parse(await file.text());
+    validateBackupStructure(raw);
+    await validateBackupChecksum(raw);
+
+    const c=backupCounts(raw.entities);
+    const version=Number(raw.version||1);
+    const ok=await uiConfirm(
+      '备份文件校验通过（V'+version+'）。\n\n'+
+      '业务员：'+c.sales_reps+'\n登记字段：'+c.form_fields+'\n客户进度：'+c.progress_stages+'\n客户：'+c.customers+'\n日志：'+c.activity_logs+
+      '\n\n继续后会先自动下载一份当前系统的安全备份，然后清空当前数据并恢复。',
+      {title:'恢复系统备份',confirmText:'开始恢复',danger:true}
+    );
+    if(!ok)return;
+
+    // Safety snapshot before destructive restore.
+    showMessage(note,'正在生成导入前安全备份…','warn');
+    const safety=await makeBackupObject();
+    downloadBackupObject(safety,'mosen717-导入前安全备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json');
+
+    showMessage(note,'备份文件已验证，正在恢复，请不要关闭页面…','warn');
+    for(const name of ['ActivityLog','Customer','ProgressStage','FormField','SalesRep'])await wipeEntity(name);
+    await restoreEntities(raw.entities);
+
+    await Promise.all([loadReps(),loadFields(),loadProgress(),loadCustomers(),loadLogs()]);
+    showMessage(note,'恢复完成并已通过结构校验。日期/日期时间、动态字段、下拉选项和客户进度关系均已恢复。','ok');
+  }catch(err){
+    showMessage(note,'导入未完成：'+(err?.message||String(err))+'。如果已经进入恢复阶段，请使用刚才自动下载的“导入前安全备份”恢复。','err')
+  }
+}
+
+async function fetchAllAdminCustomers(query){
+  const all=[];let skip=0;
+  while(true){const batch=unwrap(await base44.entities.Customer.filter(query,'-admin_sort_score',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500;if(skip>10000)break}
+  return all;
+}
+function adminBaseQuery(){
+  const q={archived:currentView==='archive'};
+  if(currentView==='rep'&&currentRepFilter)q.rep_username=currentRepFilter;
+  const chosen=document.getElementById('adminRepFilter')?.value||'';
+  if(currentView!=='rep'&&chosen)q.rep_username=chosen;
+  return q;
+}
+function adminFilterActive(){
+  return !!((document.getElementById('customerSearch')?.value||'').trim()||(document.getElementById('adminStarFilter')?.value||'')||(document.getElementById('adminProgressFilter')?.value||'')||(document.getElementById('adminCountryFilter')?.value||'').trim()||(currentView!=='rep'&&(document.getElementById('adminRepFilter')?.value||'')));
+}
+function matchesAdminFilters(r){
+  const q=(document.getElementById('customerSearch')?.value||'').trim().toLowerCase();
+  const star=document.getElementById('adminStarFilter')?.value||'';
+  const progress=document.getElementById('adminProgressFilter')?.value||'';
+  const country=(document.getElementById('adminCountryFilter')?.value||'').trim().toLowerCase();
+  const hay=(String(r.rep_username||'')+' '+JSON.stringify(r.data||{})).toLowerCase();
+  if(q&&!hay.includes(q))return false;
+  if(star==='1'&&r.starred!==true)return false;
+  if(star==='0'&&r.starred===true)return false;
+  if(progress&&!(r.completed_progress_ids||[]).map(String).includes(String(progress)))return false;
+  if(country&&!hay.includes(country))return false;
+  return true;
+}
+async function fetchCustomerPage(){
+  if(adminFilterActive()){
+    globalCustomerRows=(await fetchAllAdminCustomers(adminBaseQuery())).filter(matchesAdminFilters);
+    const start=(customerPage-1)*CUSTOMER_PAGE_SIZE;
+    customers=globalCustomerRows.slice(start,start+CUSTOMER_PAGE_SIZE);customerHasNext=start+CUSTOMER_PAGE_SIZE<globalCustomerRows.length;
+  }else{
+    globalCustomerRows=null;const skip=(customerPage-1)*CUSTOMER_PAGE_SIZE;
+    const rows=unwrap(await base44.entities.Customer.filter(adminBaseQuery(),'-admin_sort_score',CUSTOMER_PAGE_SIZE+1,skip));
+    customerHasNext=rows.length>CUSTOMER_PAGE_SIZE;customers=rows.slice(0,CUSTOMER_PAGE_SIZE);
+  }
+  if(!customers.length&&customerPage>1){customerPage--;return fetchCustomerPage()}
+}
+async function refreshCustomerCounts(){
+  const all=[];let skip=0;
+  while(true){const batch=unwrap(await base44.entities.Customer.list('-created_date',500,skip));all.push(...batch);if(batch.length<500)break;skip+=500}
+  let active=0,archived=0,counts={},archiveCounts={};
+  for(const row of all){const key=String(row.rep_username||'');if(row.archived===true){archived++;archiveCounts[key]=(archiveCounts[key]||0)+1}else{active++;counts[key]=(counts[key]||0)+1}}
+  totalCustomerCount=active;totalArchivedCount=archived;customerCountByRep=counts;archivedCountByRep=archiveCounts;
+  document.getElementById('totalCustomers').textContent=active;document.getElementById('allCustomerCount').textContent=active;
+  document.getElementById('archivedCustomerCount').textContent=archived;document.getElementById('archivedCustomersStat').textContent=archived;
+  renderSidebar();renderReps();
+}
+function scheduleCustomerCountRefresh(){clearTimeout(customerCountTimer);customerCountTimer=setTimeout(()=>refreshCustomerCounts().catch(()=>{}),1000)}
+async function loadCustomers({resetPage=false,refreshCounts=false}={}){
+  if(resetPage)customerPage=1;
+  try{await fetchCustomerPage();renderCustomers();if(refreshCounts)await refreshCustomerCounts()}
+  catch(err){document.getElementById('customerList').innerHTML='<div class="notice err">读取客户失败：'+esc(err?.message||String(err))+'</div>'}
+}
+function getVisibleCustomers(){return customers}
+function adminPagerHtml(){
+  const total=globalCustomerRows?globalCustomerRows.length:(currentView==='archive'?totalArchivedCount:(currentView==='rep'?(customerCountByRep[currentRepFilter]||0):totalCustomerCount));
+  return '<div class="customer-pager"><div class="customer-pager-info">第 <b>'+customerPage+'</b> 页 · 每页 '+CUSTOMER_PAGE_SIZE+' 条 · 共 '+total+' 条</div><div class="customer-pager-actions"><button id="adminPrevPage" class="btn soft" '+(customerPage<=1?'disabled':'')+'>上一页</button><button id="adminNextPage" class="btn soft" '+(!customerHasNext?'disabled':'')+'>下一页</button></div></div>';
+}
+function bindAdminPager(){const prev=document.getElementById('adminPrevPage'),next=document.getElementById('adminNextPage');if(prev)prev.onclick=async()=>{if(customerPage<=1)return;customerPage--;await loadCustomers()};if(next)next.onclick=async()=>{if(!customerHasNext)return;customerPage++;await loadCustomers()}}
+function fixedCustomerValue(row,key){return row.data?.[key]??''}
+function progressLabels(row){
+  const s=progressStats(row);
+  if(!progressStages.length)return {current:'未设置进度',next:'—'};
+  const completedOrdered=progressStages.filter(p=>s.done.has(String(p.id)));
+  const current=completedOrdered.length?completedOrdered[completedOrdered.length-1].label:'未开始';
+  const nextStage=progressStages.find(p=>!s.done.has(String(p.id)));
+  return {current,next:nextStage?nextStage.label:'已完成'};
+}
+function repDisplayName(username){
+  const rep=reps.find(x=>String(x.username||'')===String(username||''));
+  return rep?.display_name||rep?.username||username||'未指定业务员';
+}
+async function writeAdminLog(payload){
+  try{await base44.entities.ActivityLog.create({actor_username:'admin',actor_display_name:'管理员',actor_type:'admin',action_type:payload.action_type||'update',customer_id:payload.customer_id||'',customer_name:payload.customer_name||'',target_key:payload.target_key||'',target_label:payload.target_label||'',old_value:payload.old_value==null?'':String(payload.old_value),new_value:payload.new_value==null?'':String(payload.new_value),message:payload.message||'',event_time:new Date().toISOString(),metadata:payload.metadata||{}})}catch(_){}
+}
+function adminCustomerCopyText(row){
+  const lines=['客户姓名：'+(fixedCustomerValue(row,'f_customer_name')||''),'业务员：'+repDisplayName(row.rep_username)];
+  for(const f of fields){const v=row.data?.[f.field_key];if(v!==undefined&&v!==null&&String(v).trim()!=='')lines.push(f.label+'：'+v)}
+  const p=progressLabels(row);lines.push('目前进度：'+p.current);if(row.archived)lines.push('归档原因：'+(row.archive_reason||'未填写'));return lines.join('\n');
+}
+async function copyAdminCustomer(row){try{await navigator.clipboard.writeText(adminCustomerCopyText(row));await uiAlert('客户资料已复制到剪贴板。',{title:'复制成功'})}catch(_){await uiAlert('复制失败，请重试。',{title:'复制失败',danger:true})}}
+async function setAdminStar(row,value){await base44.entities.Customer.update(row.id,{starred:value});row.starred=value;await writeAdminLog({action_type:'customer_star',customer_id:row.id,customer_name:fixedCustomerValue(row,'f_customer_name')||'未命名客户',message:'管理员'+(value?' 将客户设为重点「':' 取消重点客户「')+(fixedCustomerValue(row,'f_customer_name')||'未命名客户')+'」'});renderCustomers()}
+async function archiveAdminCustomer(row){
+  const reason=await uiPrompt('可填写归档原因，例如：已完成 / 客户失联 / 暂停跟进 / 重复客户 / 其他。',{title:'归档客户',placeholder:'归档原因（可选）',confirmText:'下一步'});if(reason===null)return;
+  const name=fixedCustomerValue(row,'f_customer_name')||'未命名客户';if(!await uiConfirm('确定将「'+name+'」移入归档吗？\n客户资料不会删除，可以随时恢复。',{title:'确认归档',confirmText:'确认归档'}))return;
+  await base44.entities.Customer.update(row.id,{archived:true,archived_at:new Date().toISOString(),archived_by_username:'admin',archived_by_display_name:'管理员',archived_by_type:'admin',archive_reason:reason});
+  await writeAdminLog({action_type:'customer_archive',customer_id:row.id,customer_name:name,message:'管理员将客户「'+name+'」归档'+(reason?'，原因：'+reason:'')});await loadCustomers({refreshCounts:true});
+}
+async function restoreAdminCustomer(row){
+  const name=fixedCustomerValue(row,'f_customer_name')||'未命名客户';if(!await uiConfirm('将「'+name+'」恢复到正常客户列表吗？',{title:'恢复客户',confirmText:'确认恢复'}))return;
+  await base44.entities.Customer.update(row.id,{archived:false,archived_at:'',archived_by_username:'',archived_by_display_name:'',archived_by_type:'',archive_reason:''});
+  await writeAdminLog({action_type:'customer_restore',customer_id:row.id,customer_name:name,message:'管理员将客户「'+name+'」从归档恢复'});await loadCustomers({refreshCounts:true});
+}
+function renderCustomers(){
+  const rows=getVisibleCustomers(),box=document.getElementById('customerList');
+  if(!rows.length){box.innerHTML='<div class="empty">'+(currentView==='archive'?'暂无归档客户':'暂无匹配客户')+'</div>'+adminPagerHtml();bindAdminPager();return}
+  const eye='<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
+  const archived=currentView==='archive';
+  box.innerHTML='<div class="table-wrap customer-table fixed-customer-table"><table><thead><tr><th>转主号时间</th><th>客户姓名</th><th>手机号</th><th>邮箱</th><th>损失金额</th><th>目前进度</th><th>'+(archived?'归档信息':'下一步')+'</th><th>操作</th></tr></thead><tbody>'+rows.map(r=>{const s=progressStats(r),pl=progressLabels(r),archiveInfo=r.archived?((r.archive_reason||'未填写原因')+' · '+(formatDate(r.archived_at)||'')):pl.next;return '<tr class="customer-progress-row '+(r.starred?'starred-row':'')+'" style="--row-progress:'+s.percent+'%;--row-fill:'+s.fill+';--row-solid:'+s.solid+'"><td data-label="转主号时间">'+esc(formatDate(fixedCustomerValue(r,'f_transfer_main_time'))||'—')+'</td><td data-label="客户姓名"><div class="customer-name-stack"><div class="customer-name-line"><button class="star-btn '+(r.starred?'active':'')+'" data-id="'+r.id+'" type="button">★</button><b>'+esc(fixedCustomerValue(r,'f_customer_name')||'—')+'</b><span class="row-progress-badge">'+s.percent+'%</span></div><div class="customer-owner-line">业务员：'+esc(repDisplayName(r.rep_username))+'</div></div></td><td data-label="手机号">'+esc(fixedCustomerValue(r,'f_phone')||'—')+'</td><td data-label="邮箱">'+esc(fixedCustomerValue(r,'f_email')||'—')+'</td><td data-label="损失金额">'+esc(fixedCustomerValue(r,'f_loss_amount')||'—')+'</td><td data-label="目前进度"><span class="current-progress-text" style="color:'+s.solid+'">'+esc(pl.current)+'</span></td><td data-label="'+(archived?'归档信息':'下一步')+'">'+esc(archiveInfo||'—')+'</td><td data-label="操作"><div class="row nowrap"><span class="preview-wrap" data-id="'+r.id+'"><button class="eye-btn" type="button">'+eye+'</button></span><button class="btn soft copycustomer" data-id="'+r.id+'">复制</button>'+(archived?'<button class="btn soft restorecustomer" data-id="'+r.id+'">恢复</button><button class="btn danger delcustomer" data-id="'+r.id+'">永久删除</button>':'<button class="btn soft editcustomer" data-id="'+r.id+'">编辑</button><button class="btn soft archivecustomer" data-id="'+r.id+'">归档</button>')+'</div></td></tr>'}).join('')+'</tbody></table></div>'+adminPagerHtml();
+  bindPreviewHover(box);bindAdminPager();
+  box.querySelectorAll('.editcustomer').forEach(b=>b.onclick=()=>openCustomerEditor(customers.find(x=>x.id===b.dataset.id)));
+  box.querySelectorAll('.copycustomer').forEach(b=>b.onclick=()=>copyAdminCustomer(customers.find(x=>x.id===b.dataset.id)));
+  box.querySelectorAll('.archivecustomer').forEach(b=>b.onclick=()=>archiveAdminCustomer(customers.find(x=>x.id===b.dataset.id)));
+  box.querySelectorAll('.restorecustomer').forEach(b=>b.onclick=()=>restoreAdminCustomer(customers.find(x=>x.id===b.dataset.id)));
+  box.querySelectorAll('.star-btn').forEach(b=>b.onclick=()=>{const row=customers.find(x=>x.id===b.dataset.id);if(row)setAdminStar(row,!row.starred)});
+  box.querySelectorAll('.delcustomer').forEach(b=>b.onclick=async()=>{const row=customers.find(x=>x.id===b.dataset.id);if(!row||!await uiConfirm('永久删除后无法恢复，请确认是否继续。',{title:'永久删除客户',confirmText:'永久删除',danger:true}))return;await writeAdminLog({action_type:'customer_delete',customer_id:row.id,customer_name:fixedCustomerValue(row,'f_customer_name')||'未命名客户',message:'管理员永久删除了归档客户「'+(fixedCustomerValue(row,'f_customer_name')||'未命名客户')+'」'});await base44.entities.Customer.delete(row.id);await loadCustomers({refreshCounts:true})})
+}
+function adminCurrentEditorState(){
+  const data={};customerEditForm.querySelectorAll('[data-key]').forEach(el=>data[el.dataset.key]=el.value);
+  const completed_progress_ids=[...document.querySelectorAll('#adminProgressChecklist input[type="checkbox"]:checked')].map(x=>x.dataset.progressId).sort();
+  return JSON.stringify({data,completed_progress_ids,rep_username:document.getElementById('editRep').value});
+}
+function adminDraftKey(){return 'm717_draft_admin_'+(editingCustomerId||'none')}
+function saveAdminDraft(){if(customerModal.hidden)return;clearTimeout(adminDraftTimer);adminDraftTimer=setTimeout(()=>{try{localStorage.setItem(adminDraftKey(),adminCurrentEditorState())}catch(_){}},250)}
+function clearAdminDraft(){try{localStorage.removeItem(adminDraftKey())}catch(_){}}
+function adminEditorDirty(){return !customerModal.hidden&&adminCurrentEditorState()!==adminEditorBaseline}
+async function requestCloseAdminEditor(){if(adminEditorDirty()&&!await uiConfirm('当前修改尚未保存。已输入内容仍会保存在本机草稿中。',{title:'未保存的修改',confirmText:'仍然关闭',danger:true}))return false;customerModal.hidden=true;return true}
+customerEditForm.addEventListener('input',saveAdminDraft);customerEditForm.addEventListener('change',saveAdminDraft);document.getElementById('editRep').addEventListener('change',saveAdminDraft);
+function openCustomerEditor(row){
+  if(!row)return;editingCustomerId=row.id;
+  const active=fields.filter(f=>f.active!==false).sort((a,b)=>(a.order||0)-(b.order||0));
+  document.getElementById('editRep').innerHTML=['<option value="">未指定</option>',...reps.map(r=>'<option value="'+esc(r.username)+'" '+(String(row.rep_username||'')===String(r.username||'')?'selected':'')+'>'+esc(r.display_name||r.username)+' ('+esc(r.username)+')</option>')].join('');
+  document.getElementById('customerEditFields').innerHTML=buildGroupedFieldControls(active,row.data||{});
+  initDateTimeControls(document.getElementById('customerEditFields'));
+  renderAdminProgressChecklist(row.completed_progress_ids||[]);
+  customerEditNote.hidden=true;customerModal.hidden=false;
+  adminEditorBaseline=JSON.stringify({data:row.data||{},completed_progress_ids:(row.completed_progress_ids||[]).map(String).sort(),rep_username:row.rep_username||''});
+  try{const raw=localStorage.getItem(adminDraftKey());if(raw){const d=JSON.parse(raw);if(d?.data){document.getElementById('customerEditFields').innerHTML=buildGroupedFieldControls(active,d.data);initDateTimeControls(document.getElementById('customerEditFields'));document.getElementById('editRep').value=d.rep_username||row.rep_username||'';renderAdminProgressChecklist(d.completed_progress_ids||[]);showMessage(customerEditNote,'已恢复上次未保存的草稿。','ok')}}}catch(_){}
+}
+customerEditForm.onsubmit=async e=>{
+  e.preventDefault();
+  if(adminCustomerFormSaving)return;
+  const row=customers.find(x=>x.id===editingCustomerId);if(!row)return;
+  const submitBtn=e.submitter||customerEditForm.querySelector('button[type="submit"]');
+  const oldText=submitBtn?.textContent||'保存修改';
+  adminCustomerFormSaving=true;
+  if(submitBtn){submitBtn.disabled=true;submitBtn.textContent='保存中…';submitBtn.setAttribute('aria-busy','true')}
+  const data={...(row.data||{})};customerEditForm.querySelectorAll('[data-key]').forEach(el=>data[el.dataset.key]=el.value);
+  try{
+    const completed_progress_ids=[...document.querySelectorAll('#adminProgressChecklist input[type="checkbox"]:checked')].map(x=>x.dataset.progressId);
+    await base44.entities.Customer.update(row.id,{rep_username:document.getElementById('editRep').value,data,completed_progress_ids,admin_sort_score:completed_progress_ids.length});
+    clearAdminDraft();adminEditorBaseline=adminCurrentEditorState();showMessage(customerEditNote,'客户资料已更新。','ok');await loadCustomers();
+    setTimeout(()=>{customerModal.hidden=true;adminCustomerFormSaving=false;if(submitBtn){submitBtn.disabled=false;submitBtn.textContent=oldText;submitBtn.removeAttribute('aria-busy')}},350);
+  }catch(err){
+    adminCustomerFormSaving=false;
+    if(submitBtn){submitBtn.disabled=false;submitBtn.textContent=oldText;submitBtn.removeAttribute('aria-busy')}
+    showMessage(customerEditNote,'保存失败：'+(err?.message||String(err)),'err');
+  }
+};
+
+document.getElementById('exportBtn').onclick=async()=>{
+  const btn=document.getElementById('exportBtn');btn.disabled=true;btn.textContent='正在导出…';
+  try{const rows=(await fetchAllAdminCustomers(adminBaseQuery())).filter(matchesAdminFilters);downloadCsv((currentView==='archive'?'归档客户':currentView==='rep'?(currentRepFilter+'_客户数据'):'客户登记数据')+'.csv',[
+    ['转主号时间','客户姓名','业务员','手机号','邮箱','损失金额','目前进度','下一步/归档原因'],
+    ...rows.map(r=>{const p=progressLabels(r);return [fixedCustomerValue(r,'f_transfer_main_time'),fixedCustomerValue(r,'f_customer_name'),repDisplayName(r.rep_username),fixedCustomerValue(r,'f_phone'),fixedCustomerValue(r,'f_email'),fixedCustomerValue(r,'f_loss_amount'),p.current,r.archived?(r.archive_reason||''):p.next]})
+  ])}finally{btn.disabled=false;btn.textContent='导出 CSV'}
+};
+document.getElementById('customerSearch').oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadCustomers({resetPage:true}),450)};
+document.getElementById('toggleAdminFilters').onclick=()=>document.getElementById('adminFilters').hidden=!document.getElementById('adminFilters').hidden;
+document.getElementById('clearAdminFilters').onclick=()=>{document.getElementById('adminRepFilter').value='';document.getElementById('adminStarFilter').value='';document.getElementById('adminProgressFilter').value='';document.getElementById('adminCountryFilter').value='';document.getElementById('customerSearch').value='';loadCustomers({resetPage:true})};
+['adminRepFilter','adminStarFilter','adminProgressFilter'].forEach(id=>document.getElementById(id).addEventListener('change',()=>loadCustomers({resetPage:true})));
+document.getElementById('adminCountryFilter').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>loadCustomers({resetPage:true}),450)});
+document.getElementById('refreshCustomers').onclick=async()=>{await loadCustomers();await refreshCustomerCounts()};
+document.getElementById('refreshReps').onclick=loadReps;
+document.getElementById('closeCustomerModal').onclick=requestCloseAdminEditor;document.getElementById('cancelCustomerEdit').onclick=requestCloseAdminEditor;
+document.getElementById('logDate').onchange=loadLogs;
+document.getElementById('logSearch').oninput=loadLogs;
+document.getElementById('refreshLogs').onclick=loadLogs;
+document.getElementById('exportBackup').onclick=exportFullBackup;
+document.getElementById('importBackup').onclick=()=>document.getElementById('backupFile').click();
+document.getElementById('backupFile').onchange=async e=>{const file=e.target.files?.[0];if(file)await importFullBackup(file);e.target.value=''};
+document.getElementById('logoutBtn').onclick=()=>{localStorage.removeItem('m717_admin');location.reload()};
+if(localStorage.getItem('m717_admin')==='1')enter();
+</script></body></html>
