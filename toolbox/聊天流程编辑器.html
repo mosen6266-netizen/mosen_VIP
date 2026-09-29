@@ -91,6 +91,7 @@
     @media(max-width:480px){.attachment-grid{grid-template-columns:1fr}.head-tools{display:none}.stats{gap:10px}.step-summary span{max-width:150px}.type-badge{display:none}}
     @media print{.sidebar,.topbar,.edit-only,.toast,.read-banner{display:none!important}.app{display:block}.main{padding:0}.content{max-width:none;margin:0}.workflow-head,.step-card{box-shadow:none;break-inside:avoid}.step-body{display:block!important}.step-header{border-bottom:1px solid var(--line)}body{background:white;color:black}}
   </style>
+<script src="/mosen_VIP/vip-dialogs.js"></script>
 </head>
 <body>
   <script id="flow-data" type="application/json">{"version":1,"bundleId":"mosen-starter","shareMode":false,"theme":"light","activeWorkflowId":"flow-welcome","workflows":[{"id":"flow-welcome","name":"助理接待流程","description":"这是一个可直接修改或删除的示例流程","color":"#6d4aff","createdAt":0,"updatedAt":0,"steps":[{"id":"step-hello","title":"开场问候","type":"话术","content":"您好，很高兴为您服务。请问有什么可以帮到您？","note":"先确认客户当前是否方便沟通。","attachments":[]},{"id":"step-needs","title":"确认客户需求","type":"提问","content":"为了更准确地了解您的情况，请您简单说明一下目前遇到的问题。","note":"根据客户回答进入相应的后续流程。","attachments":[]}]}]}</script>
@@ -190,7 +191,7 @@
       $$('.copy-step',card).forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();copyText(s.content)}));
       $$('[data-field]',card).forEach(el=>el.addEventListener('input',()=>{s[el.dataset.field]=el.value;touch(f);const summary=$('.step-summary',card);$('strong',summary).textContent=s.title||'未命名步骤';$('span',summary).textContent=s.content||'暂无话术内容';$('.type-badge',card).textContent=s.type}));
       $('.move-up',card)?.addEventListener('click',()=>moveStep(f,id,-1));$('.move-down',card)?.addEventListener('click',()=>moveStep(f,id,1));
-      $('.delete-step',card)?.addEventListener('click',()=>{if(confirm('确定删除这个步骤吗？')){f.steps=f.steps.filter(x=>x.id!==id);openSteps.delete(id);touch(f);render()}});
+      $('.delete-step',card)?.addEventListener('click',async()=>{if(await vipConfirm('确定删除这个步骤吗？',{title:'删除步骤',confirmText:'删除',danger:true})){f.steps=f.steps.filter(x=>x.id!==id);openSteps.delete(id);touch(f);render()}});
       $('.attach-input',card)?.addEventListener('change',e=>addAttachments(f,s,[...e.target.files]));
       $$('.attachment',card).forEach(el=>$('.remove',el)?.addEventListener('click',()=>{s.attachments=s.attachments.filter(a=>a.id!==el.dataset.attachmentId);touch(f);renderWorkspace()}));
       card.addEventListener('dragstart',e=>{if(state.shareMode)return;e.dataTransfer.effectAllowed='move';dragId=id;card.classList.add('dragging')});
@@ -200,14 +201,14 @@
     }
     function createFlow(){const f={id:uid('flow'),name:'新建聊天流程',description:'',color:COLORS[state.workflows.length%COLORS.length],createdAt:now(),updatedAt:now(),steps:[]};state.workflows.push(f);state.activeWorkflowId=f.id;touch(f);render();setTimeout(()=>{$('#flowName')?.select()},0);sidebar.classList.remove('mobile-open')}
     function duplicateFlow(f){const c=JSON.parse(JSON.stringify(f));c.id=uid('flow');c.name=f.name+'（副本）';c.createdAt=c.updatedAt=now();c.color=COLORS[(state.workflows.indexOf(f)+1)%COLORS.length];c.steps.forEach(s=>s.id=uid('step'));state.workflows.push(c);state.activeWorkflowId=c.id;touch(c);render();showToast('流程已复制')}
-    function deleteFlow(f){if(!confirm(`确定删除“${f.name}”吗？此操作不会影响已导出的旧文件。`))return;state.workflows=state.workflows.filter(x=>x.id!==f.id);state.activeWorkflowId=state.workflows[0]?.id||null;persist();render();showToast('流程已删除')}
+    async function deleteFlow(f){if(!await vipConfirm(`确定删除“${f.name}”吗？此操作不会影响已导出的旧文件。`,{title:'删除流程',confirmText:'删除',danger:true}))return;state.workflows=state.workflows.filter(x=>x.id!==f.id);state.activeWorkflowId=state.workflows[0]?.id||null;persist();render();showToast('流程已删除')}
     function addStep(f){const s={id:uid('step'),title:'新步骤',type:'话术',content:'',note:'',attachments:[]};f.steps.push(s);openSteps.add(s.id);touch(f);renderWorkspace();setTimeout(()=>{const c=$(`[data-step-id="${s.id}"]`);c?.scrollIntoView({behavior:'smooth',block:'center'});$('[data-field="title"]',c)?.select()},20)}
     function moveStep(f,id,d){const i=f.steps.findIndex(x=>x.id===id),j=i+d;if(j<0||j>=f.steps.length)return;[f.steps[i],f.steps[j]]=[f.steps[j],f.steps[i]];touch(f);renderWorkspace()}
     async function addAttachments(f,s,files){const maxOne=20*1024*1024,totalNow=state.workflows.flatMap(x=>x.steps).flatMap(x=>x.attachments).reduce((n,a)=>n+(a.size||0),0);let running=totalNow,added=0;for(const file of files){if(file.size>maxOne){showToast(`${file.name} 超过 20MB，已跳过`);continue}if(running+file.size>50*1024*1024){showToast('全部附件已接近 50MB，请先精简文件');break}try{const data=await readFile(file);s.attachments.push({id:uid('att'),name:file.name,type:file.type||'application/octet-stream',size:file.size,data});running+=file.size;added++}catch(e){showToast(`${file.name} 读取失败`)}}if(added){touch(f);renderWorkspace();showToast(`已添加 ${added} 个附件`)} }
     function readFile(file){return new Promise((res,rej)=>{const r=new FileReader;r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(file)})}
     async function copyText(text){try{await navigator.clipboard.writeText(text)}catch(e){const t=document.createElement('textarea');t.value=text;document.body.append(t);t.select();document.execCommand('copy');t.remove()}showToast(text?'已复制话术':'内容为空')}
     function backup(){const blob=new Blob([safeJson({...state,shareMode:false})],{type:'application/json'});downloadBlob(blob,filename('流程备份','json'));showToast('备份已导出')}
-    function importBackup(file){const r=new FileReader;r.onload=()=>{try{const data=JSON.parse(r.result);if(!Array.isArray(data.workflows))throw Error();data.workflows.forEach(normalizeFlow);state={...data,bundleId:state.bundleId,shareMode:false};state.activeWorkflowId=state.workflows[0]?.id||null;persist();render();showToast('备份已导入')}catch(e){alert('无法导入：这不是有效的流程备份文件。')}};r.readAsText(file)}
+    function importBackup(file){const r=new FileReader;r.onload=()=>{try{const data=JSON.parse(r.result);if(!Array.isArray(data.workflows))throw Error();data.workflows.forEach(normalizeFlow);state={...data,bundleId:state.bundleId,shareMode:false};state.activeWorkflowId=state.workflows[0]?.id||null;persist();render();showToast('备份已导入')}catch(e){vipAlert('无法导入：这不是有效的流程备份文件。')}};r.readAsText(file)}
     function attachmentBytes(){return state.workflows.flatMap(f=>f.steps).flatMap(s=>s.attachments).reduce((n,a)=>n+(a.size||0),0)}
     function exportHtml(readonly){
       $('#exportDialog').close();
