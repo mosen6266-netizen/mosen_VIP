@@ -1046,12 +1046,23 @@ async function makeBusinessBackup(note){
 async function exportBusinessBackup(){
   const note=document.getElementById('backupNote');
   try{
-    const backup=await makeBusinessBackup(note);
-    const n=backup.counts;
+    showMessage(note,'正在读取业务数据备份快照…','warn');
+    const r=await fetch('./business-backup-snapshot.json?v='+Date.now(),{cache:'no-store'});
+    if(!r.ok)throw new Error('备份快照读取失败：HTTP '+r.status);
+    const source=await r.json();
+    if(source?.format!==BUSINESS_BACKUP_FORMAT||!source?.entities)throw new Error('业务数据备份快照格式不正确');
+
+    const backup={
+      ...source,
+      exported_at:new Date().toISOString(),
+      checksum_sha256:await sha256(JSON.stringify(source.entities))
+    };
+    const n=businessBackupCounts(backup.entities);
     downloadBackupObject(
       backup,
       'mosen_VIP-业务数据备份-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json'
     );
+    const snapshotTime=source.snapshot_updated_at||source.exported_at||'未知';
     showMessage(
       note,
       '业务数据备份已导出：业务员 '+n.sales_reps+
@@ -1061,14 +1072,14 @@ async function exportBusinessBackup(){
       '、当前日志 '+n.activity_logs+
       '、历史日志 '+n.archived_activity_logs+
       '、话术配置 '+n.workflow_definitions+
-      '、客户话术进度 '+(n.workflow_progress+n.workflow_flow_progress)+'。未读取 GitHub 仓库。',
+      '、客户话术进度 '+(n.workflow_progress+n.workflow_flow_progress)+
+      '。备份快照更新时间：'+snapshotTime+'。本次导出未读取 Base44 数据表。',
       'ok'
     );
   }catch(err){
     showMessage(note,'业务数据备份失败：'+(err?.message||String(err)),'err');
   }
 }
-
 function validateBusinessBackup(raw){
   if(raw?.format!==BUSINESS_BACKUP_FORMAT||Number(raw?.version)!==BUSINESS_BACKUP_VERSION){
     throw new Error('这不是有效的 MOSEN VIP 业务数据备份');
